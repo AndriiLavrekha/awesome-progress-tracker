@@ -1,6 +1,6 @@
 {
   "name": "awesome-progress-tracker",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "description": "Project-local Markdown progress tracking for Codex, Claude Code, and MCP-compatible tools.",
   "license": "MIT",
   "private": false,

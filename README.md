@@ -10,7 +10,7 @@ Project-local Markdown that survives context resets — so your agent picks up e
 [![Node](https://img.shields.io/badge/node-%3E%3D18-339933?style=flat-square&logo=node.js&logoColor=white)](#choose-your-path)
 [![TypeScript](https://img.shields.io/badge/-typescript-3178C6?style=flat-square&logo=typescript&logoColor=white)](#mcp-server)
 [![Plugins](https://img.shields.io/badge/plugins-Claude%20Code%20%C2%B7%20Codex-8A2BE2?style=flat-square)](#choose-your-path)
-[![Version](https://img.shields.io/badge/version-0.2.3-informational?style=flat-square)](docs/releases/v0.2.3.md)
+[![Version](https://img.shields.io/badge/version-0.3.0-informational?style=flat-square)](https://github.com/AndriiLavrekha/awesome-progress-tracker/releases/tag/v0.3.0)
 
 [Why](#why) · [Features](#features) · [Quick Start](#choose-your-path) · [MCP Tools](#mcp-server) · [Troubleshooting](#troubleshooting-codex)
 

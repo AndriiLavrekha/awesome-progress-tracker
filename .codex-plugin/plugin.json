@@ -1,6 +1,6 @@
 {
   "name": "project-progress",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "description": "Project-local Markdown progress tracking for resumable, multi-step agent work. Bundles the project-progress skill, an MCP server for a cross-project index, and lifecycle hooks that inject resume context on session start and guard sensitive progress on commit.",
   "author": {
     "name": "Andrii Lavrekha",
@@ -27,6 +27,9 @@
     "longDescription": "Keep a per-project project-progress/ folder as the canonical resume source. The skill guides the agent to maintain it; the MCP server exposes a cross-project index; and lifecycle hooks inject the Resume Snapshot on session start, block committing progress files marked commit_progress:false or sensitivity:sensitive, and remind you to update progress when the working tree changed but Progress.md did not.",
     "developerName": "Andrii Lavrekha",
     "category": "Productivity",
-    "capabilities": ["Read", "Write"]
+    "capabilities": [
+      "Read",
+      "Write"
+    ]
   }
 }
