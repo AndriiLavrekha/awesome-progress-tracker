@@ -1,0 +1,46 @@
+{
+  "name": "awesome-progress-tracker",
+  "version": "0.2.3",
+  "description": "Project-local Markdown progress tracking for Codex, Claude Code, and MCP-compatible tools.",
+  "license": "MIT",
+  "private": false,
+  "type": "module",
+  "bin": {
+    "awesome-progress-tracker": "dist/src/cli.js",
+    "project-progress": "dist/src/cli.js"
+  },
+  "files": [
+    "dist/src",
+    "templates/project-progress",
+    "agent-instructions",
+    "skills/project-progress",
+    ".codex-plugin",
+    ".agents/plugins",
+    ".mcp.json",
+    ".mcp.codex.json",
+    "hooks",
+    "TESTING.md",
+    "README.md",
+    "RELEASE_CHECKLIST.md"
+  ],
+  "scripts": {
+    "test": "vitest run",
+    "test:mcp": "vitest run tests/mcp",
+    "typecheck": "tsc -p tsconfig.test.json",
+    "build": "tsc -p tsconfig.json",
+    "build:mcp": "tsc -p tsconfig.json",
+    "mcp": "node dist/src/mcp/server.js",
+    "hook": "node dist/src/hook/cli.js",
+    "prepare": "npm run build",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "latest",
+    "zod": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "typescript": "latest",
+    "vitest": "latest"
+  }
+}

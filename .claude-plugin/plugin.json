@@ -1,0 +1,23 @@
+{
+  "name": "project-progress",
+  "version": "0.2.3",
+  "description": "Project-local Markdown progress tracking for resumable, multi-step agent work. Bundles the project-progress skill, an MCP server for a cross-project index, and lifecycle hooks that inject resume context on session start and guard sensitive progress on commit.",
+  "author": {
+    "name": "Andrii Lavrekha",
+    "url": "https://github.com/AndriiLavrekha"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/AndriiLavrekha/awesome-progress-tracker",
+  "repository": "https://github.com/AndriiLavrekha/awesome-progress-tracker",
+  "keywords": [
+    "progress",
+    "resume",
+    "memory",
+    "session",
+    "mcp",
+    "hooks",
+    "agent",
+    "markdown",
+    "project-management"
+  ]
+}

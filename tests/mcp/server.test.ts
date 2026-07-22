@@ -1,0 +1,252 @@
+import { describe, expect, it } from "vitest";
+import { promises as fs } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import {
+  boundProjectSummaries,
+  compactProjectListItem,
+  errorResult,
+  lastMilestoneSchema,
+  projectSelectorSchema,
+  projectsJson,
+  progressSectionSchema,
+  refreshProjectsJson,
+  resolveProject,
+  rootsFromEnv,
+  sectionContentSchema,
+  successResult,
+  toolDefinitions
+} from "../../src/mcp/server.js";
+import { writeProjectIndex } from "../../src/mcp/index.js";
+import type { ProjectSummary } from "../../src/mcp/schema.js";
+
+function indexSummary(overrides: Partial<ProjectSummary>): ProjectSummary {
+  return {
+    progressPath: "C:/repo/project-progress/Progress.md",
+    project: "Demo",
+    status: "active",
+    path: "C:/repo",
+    updated: "2026-06-27",
+    lastMilestone: "created",
+    deployed: false,
+    deploymentUrl: "",
+    sensitivity: "normal",
+    commitProgress: true,
+    resumeSnapshot: "Summary",
+    nextAction: "Continue",
+    blockers: "None",
+    ...overrides
+  };
+}
+
+async function withIndex(
+  projects: ProjectSummary[],
+  run: () => Promise<void>
+): Promise<void> {
+  const previousHome = process.env.AWESOME_PROGRESS_TRACKER_HOME;
+  const previousRoots = process.env.PROJECT_PROGRESS_ROOTS;
+  const homeDir = await fs.mkdtemp(path.join(os.tmpdir(), "project-progress-home-"));
+  process.env.AWESOME_PROGRESS_TRACKER_HOME = homeDir;
+  delete process.env.PROJECT_PROGRESS_ROOTS;
+  await writeProjectIndex({ schemaVersion: 1, updatedAt: "2026-06-27T00:00:00Z", projects }, { homeDir });
+  try {
+    await run();
+  } finally {
+    if (previousHome === undefined) delete process.env.AWESOME_PROGRESS_TRACKER_HOME;
+    else process.env.AWESOME_PROGRESS_TRACKER_HOME = previousHome;
+    if (previousRoots === undefined) delete process.env.PROJECT_PROGRESS_ROOTS;
+    else process.env.PROJECT_PROGRESS_ROOTS = previousRoots;
+  }
+}
+
+describe("MCP server tools", () => {
+  it("returns typed success and actionable error envelopes", () => {
+    expect(successResult({ updated: true }, "Progress updated.")).toMatchObject({
+      structuredContent: { updated: true },
+      isError: false
+    });
+    expect(errorResult("project_not_found", "Project not found.", "Refresh projects and retry.")).toMatchObject({
+      structuredContent: { error: { code: "project_not_found" } },
+      isError: true
+    });
+  });
+
+  it("rejects invalid write input at the MCP schema boundary", () => {
+    expect(projectSelectorSchema.safeParse("  ").success).toBe(false);
+    expect(progressSectionSchema.safeParse("Not A Real Section").success).toBe(false);
+    expect(sectionContentSchema.safeParse("x".repeat(4001)).success).toBe(false);
+    expect(lastMilestoneSchema.safeParse("x".repeat(241)).success).toBe(false);
+  });
+
+  it("marks individually truncated compact fields", () => {
+    expect(compactProjectListItem(indexSummary({ nextAction: "x".repeat(1001) }))).toMatchObject({
+      nextAction: `${"x".repeat(997)}...`,
+      truncatedFields: ["nextAction"]
+    });
+  });
+
+  it("defines compact progress tools", () => {
+    expect(toolDefinitions.map((tool) => tool.name)).toEqual([
+      "list_projects",
+      "refresh_projects",
+      "read_project_progress",
+      "update_project_progress",
+      "mark_project_status"
+    ]);
+  });
+
+  it("does not scan the launch cwd when PROJECT_PROGRESS_ROOTS is unset or blank", () => {
+    expect(rootsFromEnv(undefined)).toEqual([]);
+    expect(rootsFromEnv(" ;  ")).toEqual([]);
+  });
+
+  it("returns no projects when PROJECT_PROGRESS_ROOTS is unset", async () => {
+    const previousRoots = process.env.PROJECT_PROGRESS_ROOTS;
+    const previousHome = process.env.AWESOME_PROGRESS_TRACKER_HOME;
+    process.env.AWESOME_PROGRESS_TRACKER_HOME = await fs.mkdtemp(path.join(os.tmpdir(), "project-progress-home-"));
+    delete process.env.PROJECT_PROGRESS_ROOTS;
+
+    try {
+      expect(JSON.parse(await projectsJson())).toEqual({
+        items: [],
+        total: 0,
+        returned: 0,
+        truncated: false,
+        indexUpdatedAt: "",
+        indexAgeMs: null,
+        refreshRecommended: true
+      });
+    } finally {
+      if (previousHome === undefined) {
+        delete process.env.AWESOME_PROGRESS_TRACKER_HOME;
+      } else {
+        process.env.AWESOME_PROGRESS_TRACKER_HOME = previousHome;
+      }
+      if (previousRoots === undefined) {
+        delete process.env.PROJECT_PROGRESS_ROOTS;
+      } else {
+        process.env.PROJECT_PROGRESS_ROOTS = previousRoots;
+      }
+    }
+  });
+
+  it("returns a bounded summary envelope for the default project list", async () => {
+    await withIndex(
+      [
+        indexSummary({ project: "First", resumeSnapshot: "Long private resume context.", blockers: "None." }),
+        indexSummary({ project: "Second", progressPath: "C:/second/project-progress/Progress.md", path: "C:/second" })
+      ],
+      async () => {
+        expect(JSON.parse(await projectsJson())).toEqual({
+          items: [
+            { project: "First", status: "active", updated: "2026-06-27", nextAction: "Continue", path: "C:/repo", truncatedFields: [] },
+            { project: "Second", status: "active", updated: "2026-06-27", nextAction: "Continue", path: "C:/second", truncatedFields: [] }
+          ],
+          total: 2,
+          returned: 2,
+          truncated: false,
+          indexUpdatedAt: "2026-06-27T00:00:00Z",
+          indexAgeMs: expect.any(Number),
+          refreshRecommended: true
+        });
+      }
+    );
+  });
+
+  it("returns refresh statistics without repeating the full project list", async () => {
+    await withIndex([indexSummary({ project: "First" })], async () => {
+      const result = JSON.parse(await refreshProjectsJson());
+      expect(result).toMatchObject({ refreshed: true, total: 0 });
+      expect(result.projects).toBeUndefined();
+    });
+  });
+
+  it("splits configured roots on semicolons", () => {
+    expect(rootsFromEnv("C:/one; C:/two ;")).toEqual(["C:/one", "C:/two"]);
+  });
+
+  it("caps project summaries and truncates long compact fields", () => {
+    const longText = "abcdefghijklmnopqrstuvwxyz";
+    const summaries: ProjectSummary[] = Array.from({ length: 3 }, (_, index) => ({
+      progressPath: longText,
+      project: longText,
+      status: "active",
+      path: longText,
+      updated: longText,
+      lastMilestone: longText,
+      deployed: false,
+      deploymentUrl: longText,
+      sensitivity: "normal",
+      commitProgress: true,
+      resumeSnapshot: longText,
+      nextAction: longText,
+      blockers: longText
+    }));
+
+    const bounded = boundProjectSummaries(summaries, { maxProjects: 2, maxStringLength: 12 });
+
+    expect(bounded).toHaveLength(2);
+    expect(bounded[0].progressPath).toBe("abcdefghi...");
+    expect(bounded[0].project).toBe("abcdefghi...");
+    expect(bounded[0].path).toBe("abcdefghi...");
+    expect(bounded[0].updated).toBe("abcdefghi...");
+    expect(bounded[0].lastMilestone).toBe("abcdefghi...");
+    expect(bounded[0].deploymentUrl).toBe("abcdefghi...");
+    expect(bounded[0].resumeSnapshot).toBe("abcdefghi...");
+    expect(bounded[0].nextAction).toBe("abcdefghi...");
+    expect(bounded[0].blockers).toBe("abcdefghi...");
+  });
+
+  it("resolves a unique project by name", async () => {
+    await withIndex([indexSummary({ project: "Solo", progressPath: "C:/solo/project-progress/Progress.md", path: "C:/solo" })], async () => {
+      const resolution = await resolveProject("Solo");
+      expect(resolution.error).toBeUndefined();
+      expect(resolution.project?.path).toBe("C:/solo");
+    });
+  });
+
+  it("errors on an ambiguous name instead of editing the first match", async () => {
+    await withIndex(
+      [
+        indexSummary({ project: "Dup", progressPath: "C:/one/project-progress/Progress.md", path: "C:/one" }),
+        indexSummary({ project: "Dup", progressPath: "C:/two/project-progress/Progress.md", path: "C:/two" })
+      ],
+      async () => {
+        const resolution = await resolveProject("Dup");
+        expect(resolution.project).toBeUndefined();
+        expect(resolution.error).toContain("ambiguous");
+        expect(resolution.error).toContain("C:/one");
+        expect(resolution.error).toContain("C:/two");
+      }
+    );
+  });
+
+  it("disambiguates duplicate names by exact path selector", async () => {
+    await withIndex(
+      [
+        indexSummary({ project: "Dup", progressPath: "C:/one/project-progress/Progress.md", path: "C:/one" }),
+        indexSummary({ project: "Dup", progressPath: "C:/two/project-progress/Progress.md", path: "C:/two" })
+      ],
+      async () => {
+        const resolution = await resolveProject("C:/two");
+        expect(resolution.error).toBeUndefined();
+        expect(resolution.project?.path).toBe("C:/two");
+      }
+    );
+  });
+
+  it("returns bounded selector suggestions when a project is not found", async () => {
+    await withIndex([indexSummary({ project: "Solo" })], async () => {
+      const resolution = await resolveProject("sol");
+      expect(resolution.error).toBe("project not found");
+      expect(resolution.suggestions).toEqual([expect.objectContaining({ project: "Solo", path: "C:/repo" })]);
+    });
+  });
+
+  it("points the package mcp script at the emitted server path", async () => {
+    const packageJson = JSON.parse(await fs.readFile(path.join(process.cwd(), "package.json"), "utf-8"));
+
+    expect(packageJson.scripts.mcp).toBe("node dist/src/mcp/server.js");
+  });
+
+});

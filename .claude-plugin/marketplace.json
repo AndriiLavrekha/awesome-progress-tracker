@@ -1,0 +1,20 @@
+{
+  "name": "awesome-progress-tracker",
+  "owner": {
+    "name": "Andrii Lavrekha",
+    "url": "https://github.com/AndriiLavrekha"
+  },
+  "metadata": {
+    "description": "Project-local Markdown progress tracking for Claude Code, Codex, and MCP-compatible agents.",
+    "version": "0.2.3"
+  },
+  "plugins": [
+    {
+      "name": "project-progress",
+      "source": "./",
+      "description": "Resumable, project-local progress tracking: the project-progress skill, an MCP index server, and lifecycle hooks (resume-context injection on start, sensitive-progress commit guard).",
+      "category": "productivity",
+      "tags": ["progress", "resume", "memory", "session", "mcp", "hooks"]
+    }
+  ]
+}

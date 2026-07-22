@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "project-progress": {
+      "command": "node",
+      "args": ["dist/src/mcp/server.js"],
+      "cwd": "."
+    }
+  }
+}

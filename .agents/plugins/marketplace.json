@@ -1,0 +1,20 @@
+{
+  "name": "awesome-progress-tracker",
+  "interface": {
+    "displayName": "Awesome Progress Tracker"
+  },
+  "plugins": [
+    {
+      "name": "project-progress",
+      "source": {
+        "source": "local",
+        "path": "."
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

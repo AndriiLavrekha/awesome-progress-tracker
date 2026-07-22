@@ -1,0 +1,46 @@
+{
+  "description": "Awesome Progress Tracker lifecycle hooks: inject resume context on session start, remind to check remaining work before the first edit, guard sensitive progress on commit, and remind to update progress at session end.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/src/hook/cc-adapter.js\" session-start"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/src/hook/cc-adapter.js\" pre-commit",
+            "if": "Bash(git commit:*)"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/src/hook/cc-adapter.js\" pre-edit"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/src/hook/cc-adapter.js\" stop"
+          }
+        ]
+      }
+    ]
+  }
+}

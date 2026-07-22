@@ -1,0 +1,11 @@
+.worktrees/
+__pycache__/
+*.py[cod]
+node_modules/
+
+# This repo's own dogfooded progress state: internal session notes, not product code.
+/project-progress/
+
+# dist/ is intentionally committed: Claude Code plugins run from the cloned repo
+# with no build step, so the compiled output under dist/src must be checked in.
+# Run `npm run build` and commit dist/ before releasing.

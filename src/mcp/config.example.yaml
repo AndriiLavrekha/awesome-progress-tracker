@@ -1,0 +1,7 @@
+project_roots:
+  - C:/Users/you/Documents
+  - C:/Users/you/Projects
+exclude:
+  - node_modules
+  - .git
+  - vendor
