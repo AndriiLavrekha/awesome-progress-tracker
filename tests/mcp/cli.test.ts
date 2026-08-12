@@ -1,7 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { EventEmitter } from "node:events";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { PassThrough } from "node:stream";
+import { describe, expect, it, vi } from "vitest";
 import {
   helpText,
   initProject,
@@ -11,12 +13,54 @@ import {
   parseArgs,
   readStatus,
   resetProjectState,
+  runCli,
   runDoctor,
   setProjectState,
   uninstallAgent
 } from "../../src/cli.js";
 import { readProjectIndex } from "../../src/mcp/index.js";
 import { readProjectTrackingState } from "../../src/project-state.js";
+
+const { spawnMock } = vi.hoisted(() => ({ spawnMock: vi.fn() }));
+
+vi.mock("node:child_process", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:child_process")>();
+  return { ...actual, spawn: spawnMock };
+});
+
+function mockHermesLifecycle(options: { installed?: boolean } = {}): void {
+  let mcpInstalled = options.installed ?? false;
+  spawnMock.mockImplementation((_command: string, args: string[]) => {
+    const child = new EventEmitter() as EventEmitter & {
+      stdout: PassThrough;
+      stderr: PassThrough;
+      stdin: PassThrough;
+      kill: () => boolean;
+    };
+    child.stdout = new PassThrough();
+    child.stderr = new PassThrough();
+    child.stdin = new PassThrough();
+    child.kill = () => true;
+
+    queueMicrotask(() => {
+      let stdout = "";
+      if (args[0] === "skills" && args[1] === "list") {
+        stdout = options.installed ? "NAME SOURCE\nproject-progress hub\n" : "No skills installed.\n";
+      } else if (args[0] === "mcp" && args[1] === "list") {
+        stdout = mcpInstalled ? "NAME STATUS\nawesome-progress-tracker enabled\n" : "No MCP servers configured.\n";
+      } else if (args[0] === "mcp" && args[1] === "add") {
+        mcpInstalled = true;
+      } else if (args[0] === "mcp" && args[1] === "remove") {
+        mcpInstalled = false;
+      }
+      child.stdout.end(stdout);
+      child.stderr.end();
+      child.emit("close", 0, null);
+    });
+
+    return child;
+  });
+}
 
 describe("npm CLI", () => {
   it("exposes package binaries for npm and npx", async () => {
@@ -58,7 +102,11 @@ describe("npm CLI", () => {
     expect(parseArgs(["install", "-g", "hermes"]).agent).toBe("hermes");
     expect(parseArgs(["install", "--agent=hermes"]).agent).toBe("hermes");
     expect(helpText()).toContain("claude|codex|hermes");
-    expect(helpText()).toContain("Claude Code, Codex, or Hermes");
+    expect(helpText()).toContain("Install bootstrap instructions for Claude Code/Codex or Skill + MCP for Hermes.");
+    expect(helpText()).not.toContain("global bootstrap instructions for Claude Code, Codex, or Hermes");
+    expect(helpText()).toContain("install-mcp -g hermes [--roots <paths>] [--verify]");
+    expect(helpText()).not.toContain("uninstall [-g claude|codex|hermes] [--scope project]");
+    expect(helpText()).toContain("Hermes MCP is profile-managed");
     expect(parseArgs(["install", "-g", "codex", "--roots", "C:/one;C:/two"]).roots).toBe("C:/one;C:/two");
     expect(parseArgs(["install", "--verify"]).verify).toBe(true);
     expect(parseArgs(["doctor", "--json"])).toMatchObject({ command: "doctor", json: true });
@@ -76,6 +124,94 @@ describe("npm CLI", () => {
       targetDir: "C:/repo"
     });
     expect(() => parseArgs(["install", "-g", "both"])).toThrow(/claude, codex, or hermes/);
+  });
+
+  it("rejects project-local scope for Hermes-managed MCP commands", () => {
+    expect(() => parseArgs(["install-mcp", "-g", "hermes", "--local"])).toThrow(
+      /Hermes only supports profile-managed MCP/
+    );
+    expect(() => parseArgs(["install-mcp", "--local", "-g", "hermes"])).toThrow(
+      /Hermes only supports profile-managed MCP/
+    );
+    expect(() => parseArgs(["install", "-g", "hermes", "--local"])).toThrow(
+      /Hermes only supports profile-managed MCP/
+    );
+    expect(() => parseArgs(["uninstall", "-g", "hermes", "--scope", "project"])).toThrow(
+      /Hermes only supports profile-managed MCP/
+    );
+  });
+
+  it("prints Hermes-specific install guidance from runCli", async () => {
+    mockHermesLifecycle();
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    try {
+      await expect(runCli(["install", "-g", "hermes"])).resolves.toBe(0);
+      const output = log.mock.calls.map(([line]) => String(line)).join("\n");
+
+      expect(output).toContain("Installed Awesome Progress Tracker Skill + MCP for Hermes.");
+      expect(output).toContain("Restart Hermes so it reloads the skill and MCP server.");
+      expect(output).toContain("awesome-progress-tracker status -g hermes");
+      expect(output).toContain("awesome-progress-tracker doctor -g hermes");
+      expect(output).not.toContain("bootstrap");
+      expect(output).not.toContain("Claude Code/Codex");
+    } finally {
+      log.mockRestore();
+      spawnMock.mockReset();
+    }
+  });
+
+  it("prints Hermes-specific MCP-only guidance from runCli", async () => {
+    mockHermesLifecycle();
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    try {
+      await expect(runCli(["install-mcp", "-g", "hermes"])).resolves.toBe(0);
+      const output = log.mock.calls.map(([line]) => String(line)).join("\n");
+
+      expect(output).toContain("Installed Awesome Progress Tracker MCP server for Hermes.");
+      expect(output).toContain("Restart Hermes so it reloads the MCP server.");
+      expect(output).toContain("awesome-progress-tracker status -g hermes");
+      expect(output).toContain("awesome-progress-tracker doctor -g hermes");
+      expect(output).not.toContain("Claude Code/Codex");
+    } finally {
+      log.mockRestore();
+      spawnMock.mockReset();
+    }
+  });
+
+  it("does not describe Hermes uninstall as bootstrap removal", async () => {
+    mockHermesLifecycle({ installed: true });
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    try {
+      await expect(runCli(["uninstall", "-g", "hermes"])).resolves.toBe(0);
+      const output = log.mock.calls.map(([line]) => String(line)).join("\n");
+
+      expect(output).toContain("Removed Awesome Progress Tracker Skill + MCP for Hermes.");
+      expect(output).not.toContain("bootstrap");
+    } finally {
+      log.mockRestore();
+      spawnMock.mockReset();
+    }
+  });
+
+  it("rejects direct project-scoped Hermes MCP installation before writing generic config", async () => {
+    const project = await fs.mkdtemp(path.join(os.tmpdir(), "project-progress-project-"));
+    const home = await fs.mkdtemp(path.join(os.tmpdir(), "project-progress-home-"));
+    const runner = vi.fn();
+
+    await expect(installAgent({
+      agent: "hermes",
+      cwd: project,
+      homeDir: home,
+      mcpOnly: true,
+      scope: "project",
+      commandRunner: runner
+    })).rejects.toThrow(/Hermes only supports profile-managed MCP/);
+
+    await expect(fs.stat(path.join(project, ".mcp.json"))).rejects.toMatchObject({ code: "ENOENT" });
+    expect(runner).not.toHaveBeenCalled();
   });
 
   it("installs Claude bootstrap instructions and MCP config by default", async () => {

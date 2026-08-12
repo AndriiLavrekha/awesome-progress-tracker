@@ -5,7 +5,7 @@ status: in_progress
 path: C:/Users/nkinc/Documents/progress-tracker
 agent_last_used: codex
 updated: 2026-08-12
-last_milestone: Hermes Skill + MCP integration design approved; spec drafted for review
+last_milestone: Hermes final-review fixes implemented and repository verification passed
 deployed: true
 deployment_url: https://github.com/AndriiLavrekha/awesome-progress-tracker/releases/tag/v0.2.3
 sensitivity: normal
@@ -19,6 +19,8 @@ commit_progress: true
 The Codex MCP cold-start fix is released as `v0.2.2`. The Codex plugin now starts its already-installed MCP artifact with `node dist/src/mcp/server.js` and `cwd: "."`, avoiding GitHub-source npx installation during MCP initialization. Release verification passed: focused and full tests, typecheck, build, package dry-run, and a JSON-RPC initialize response in 0.360 seconds.
 
 On top of that, added a `PreToolUse` hook on `Edit`/`Write` (`handlePreEdit` in `src/hook/cc-adapter.ts`, subcommand `pre-edit`) that reminds the agent once per session to check `Tasks.md`/`Open Questions.md` before changing project files, closing the gap where casual "add a feature"/"do a pass" requests skipped the `project-progress` skill entirely. TDD'd with 4 new tests; wired into `hooks/hooks.json` and `hooks/hooks-codex.json`; manifest tests and SKILL.md updated. Full suite: 97 tests passed, typecheck clean, build clean. Published as `v0.2.3`.
+
+The Hermes Skill + MCP implementation is now complete in the isolated worktree. Final-review fixes add an explicit tested PowerShell disposable-profile recipe, Hermes-specific CLI success/uninstall guidance, and hard rejection of unsupported Hermes project-local MCP install/uninstall semantics. Fresh verification passed: 39 focused tests, all 116 repository tests, and typecheck.
 
 ## Current State
 
@@ -40,7 +42,7 @@ The user described losing project state across many folders, coding agents, term
 
 ## Next Action
 
-Choose the execution mode for `docs/superpowers/plans/2026-08-12-hermes-skill-mcp-integration.md`, then execute its test-first tasks and verify in an isolated Hermes profile.
+Rebuild the package and repeat the end-to-end disposable `HERMES_HOME` smoke test, then complete final review and release preparation.
 
 ## Remaining Work
 
@@ -70,8 +72,10 @@ Choose the execution mode for `docs/superpowers/plans/2026-08-12-hermes-skill-mc
 - [x] Review and approve the Hermes Skill + MCP integration specification.
 - [x] Approve the Hermes Skill + MCP integration specification and supersede the lifecycle-plugin release gate.
 - [x] Write the Hermes Skill + MCP implementation plan.
-- [ ] Implement Hermes CLI-backed install, status, doctor, and uninstall workflows with focused tests.
-- [ ] Verify the packaged integration against an isolated Hermes profile.
+- [x] Implement Hermes CLI-backed install, status, doctor, and uninstall workflows with focused tests.
+- [x] Resolve final-review findings for PowerShell verification, Hermes-specific CLI copy, and profile-only MCP scope.
+- [ ] Re-run packaged integration verification against an isolated Hermes profile after the final-review fixes.
+- [ ] Complete final quality review and release preparation.
 
 ## Done
 
@@ -96,10 +100,13 @@ Choose the execution mode for `docs/superpowers/plans/2026-08-12-hermes-skill-mc
 - [x] Added doctor, install verification, MCP-only install, and project-local MCP config.
 - [x] Added `TESTING.md` and `agent-instructions/SELF-TEST.md`.
 - [x] Added a `PreToolUse` pre-edit reminder hook (`handlePreEdit`) so agents check remaining work before changing files, even when the skill isn't explicitly invoked.
+- [x] Added Hermes CLI-backed Skill + MCP install, status, doctor, and uninstall support.
+- [x] Added tested POSIX and PowerShell disposable Hermes verification recipes.
+- [x] Added Hermes-specific CLI output and rejected unsupported project-local Hermes MCP semantics.
 
 ## Blockers
 
-None. ADR 0015 supersedes the prior lifecycle-plugin release gate: supported Hermes compatibility begins with Skill + MCP; lifecycle hooks are deferred.
+None. Final-review Important findings are resolved. ADR 0015 still defines Hermes compatibility as Skill + MCP with lifecycle hooks deferred.
 
 ## Deployment
 
@@ -116,7 +123,8 @@ GitHub releases published: https://github.com/AndriiLavrekha/awesome-progress-tr
 - Phase 2 validation and hook support are reviewed.
 - Phase 3 agent instructions are reviewed.
 - Phase 4 MCP server receives final quality approval.
-- User chooses execution mode and release verification passes.
+- Hermes final-review fixes pass focused tests, the full test suite, and typecheck.
+- Packaged Hermes verification passes in an isolated `HERMES_HOME`.
 
 ## Resume Instructions
 

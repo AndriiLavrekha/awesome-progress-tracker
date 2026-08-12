@@ -264,11 +264,12 @@ Expected:
 
 Use a temporary `HERMES_HOME` so the test never changes your real Hermes profile.
 
+### POSIX (Bash/Zsh)
+
 1. Build and package the repo:
 
 ```bash
-npm pack
-PACKAGE_TGZ="$(node -p "const pkg=require('./package.json'); `${pkg.name}-${pkg.version}.tgz`")"
+PACKAGE_TGZ="$(npm pack --silent)"
 ```
 
 2. In a disposable shell, point Hermes at an isolated home and install the packaged CLI:
@@ -314,6 +315,30 @@ Expected:
 - The Hermes agent can list projects, read project progress, and update the Next Action through the MCP tools.
 - Opt-out suppresses future initialization prompts for that disposable repo.
 - `uninstall -g hermes` removes the managed skill and MCP server cleanly.
+
+### PowerShell
+
+Use this equivalent recipe from the repository root on Windows. It creates a unique disposable Hermes home under the system temporary directory and leaves your normal Hermes profile untouched.
+
+```powershell
+$packageTgz = npm pack --silent
+$hermesHome = Join-Path ([System.IO.Path]::GetTempPath()) ("apt-hermes-" + [guid]::NewGuid())
+New-Item -ItemType Directory -Path $hermesHome | Out-Null
+$env:HERMES_HOME = $hermesHome
+
+npx --yes --package="$packageTgz" awesome-progress-tracker install -g hermes --roots "C:/path/to/projects"
+hermes skills list --source hub
+hermes mcp list
+hermes mcp test awesome-progress-tracker
+npx --yes --package="$packageTgz" awesome-progress-tracker doctor -g hermes
+
+# Run the initialized-project agent smoke and disposable-repo opt-out checks described above.
+npx --yes --package="$packageTgz" awesome-progress-tracker state set C:/path/to/disposable-repo --state opted-out
+npx --yes --package="$packageTgz" awesome-progress-tracker uninstall -g hermes
+
+Remove-Item Env:HERMES_HOME
+Write-Host "Disposable Hermes profile remains at $hermesHome for inspection or manual cleanup."
+```
 
 ## Report Format
 

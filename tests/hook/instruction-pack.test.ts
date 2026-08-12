@@ -28,11 +28,19 @@ describe("instruction pack", () => {
   it("documents disposable Hermes verification without changing a real profile", async () => {
     const text = await read("TESTING.md");
     assertContainsAll(text, [
+      "### POSIX (Bash/Zsh)",
       "HERMES_HOME",
       "npm pack",
       "PACKAGE_TGZ",
-      "pkg.name}-${pkg.version}.tgz",
+      'PACKAGE_TGZ="$(npm pack --silent)"',
       'npx --yes --package="$PACKAGE_TGZ" awesome-progress-tracker install -g hermes',
+      "### PowerShell",
+      "$packageTgz = npm pack --silent",
+      "$hermesHome = Join-Path",
+      "New-Item -ItemType Directory -Path $hermesHome",
+      "$env:HERMES_HOME = $hermesHome",
+      'npx --yes --package="$packageTgz" awesome-progress-tracker install -g hermes',
+      "Remove-Item Env:HERMES_HOME",
       "hermes skills list --source hub",
       "hermes mcp list",
       "hermes mcp test awesome-progress-tracker",

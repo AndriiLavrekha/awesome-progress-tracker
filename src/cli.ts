@@ -191,9 +191,11 @@ export function helpText(): string {
 
 Usage:
   awesome-progress-tracker install [-g claude|codex|hermes] [--roots <paths>] [--verify]
-  awesome-progress-tracker install-mcp [-g claude|codex|hermes] [--roots <paths>] [--local] [--verify]
+  awesome-progress-tracker install-mcp [-g claude|codex] [--roots <paths>] [--local] [--verify]
+  awesome-progress-tracker install-mcp -g hermes [--roots <paths>] [--verify]
   awesome-progress-tracker doctor [-g claude|codex|hermes] [--json]
-  awesome-progress-tracker uninstall [-g claude|codex|hermes] [--scope project]
+  awesome-progress-tracker uninstall [-g claude|codex|hermes]
+  awesome-progress-tracker uninstall [-g claude|codex] --scope project
   awesome-progress-tracker status [-g claude|codex|hermes]
   awesome-progress-tracker state list
   awesome-progress-tracker state set [directory] --state opted-in|opted-out|initialized|unknown
@@ -203,11 +205,11 @@ Usage:
   awesome-progress-tracker help
 
 Commands:
-  install  Install global bootstrap instructions for Claude Code, Codex, or Hermes.
-  install-mcp  Install only MCP configuration.
-  doctor  Verify npx, bootstrap, MCP config, and project/index state.
-  uninstall  Remove installed bootstrap instructions and MCP config.
-  status  Show project, bootstrap, and MCP installation status.
+  install  Install bootstrap instructions for Claude Code/Codex or Skill + MCP for Hermes.
+  install-mcp  Install only MCP configuration; Hermes MCP is profile-managed.
+  doctor  Verify the agent-specific install plus project/index state.
+  uninstall  Remove managed instructions or skill plus MCP configuration.
+  status  Show project and agent-specific installation status.
   state  List, set, or reset per-project opt-in/opt-out state.
   init   Create project-progress/ Markdown files in a project.
   mcp    Start the Project Progress MCP stdio server.
@@ -490,6 +492,12 @@ export async function installAgent(options: InstallOptions = {}): Promise<Instal
   const writtenFiles: string[] = [];
   const roots = normalizeRoots(options);
   const scope = options.scope ?? "user";
+
+  if (agent === "hermes" && scope === "project") {
+    throw new Error(
+      "Hermes only supports profile-managed MCP; project-local MCP install and uninstall are not supported."
+    );
+  }
 
   if (scope === "project") {
     const projectConfig = projectMcpConfigPath(options.cwd);
@@ -946,6 +954,16 @@ export function parseArgs(argv: string[]): ParsedArgs {
     }
   }
 
+  if (
+    parsed.agent === "hermes" &&
+    parsed.scope === "project" &&
+    (parsed.command === "install" || parsed.command === "install-mcp" || parsed.command === "uninstall")
+  ) {
+    throw new Error(
+      "Hermes only supports profile-managed MCP; project-local MCP install and uninstall are not supported."
+    );
+  }
+
   return parsed;
 }
 
@@ -1001,12 +1019,23 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
 
   if (parsed.command === "install") {
     const result = await installAgent({ agent: parsed.agent, roots: parsed.roots, scope: parsed.scope });
-    console.log(`Installed Awesome Progress Tracker bootstrap for ${result.agent}.`);
+    if (result.agent === "hermes") {
+      console.log("Installed Awesome Progress Tracker Skill + MCP for Hermes.");
+    } else {
+      console.log(`Installed Awesome Progress Tracker bootstrap for ${result.agent}.`);
+    }
     for (const file of result.writtenFiles) {
       console.log(`- ${file}`);
     }
-    console.log("Restart Claude Code/Codex so it reloads bootstrap instructions and MCP config.");
-    console.log("Run `awesome-progress-tracker status` or `awesome-progress-tracker doctor` to verify setup.");
+    if (result.agent === "hermes") {
+      console.log("Restart Hermes so it reloads the skill and MCP server.");
+      console.log(
+        "Run `awesome-progress-tracker status -g hermes` and `awesome-progress-tracker doctor -g hermes` to verify setup."
+      );
+    } else {
+      console.log("Restart Claude Code/Codex so it reloads bootstrap instructions and MCP config.");
+      console.log("Run `awesome-progress-tracker status` or `awesome-progress-tracker doctor` to verify setup.");
+    }
     if (parsed.verify) {
       printDoctor(await runDoctor({ agent: parsed.agent }));
     }
@@ -1020,11 +1049,22 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
       scope: parsed.scope ?? "user",
       mcpOnly: true
     });
-    console.log(`Installed Awesome Progress Tracker MCP config for ${result.agent}.`);
+    if (result.agent === "hermes") {
+      console.log("Installed Awesome Progress Tracker MCP server for Hermes.");
+    } else {
+      console.log(`Installed Awesome Progress Tracker MCP config for ${result.agent}.`);
+    }
     for (const file of result.writtenFiles) {
       console.log(`- ${file}`);
     }
-    console.log("Restart Claude Code/Codex so it reloads MCP config.");
+    if (result.agent === "hermes") {
+      console.log("Restart Hermes so it reloads the MCP server.");
+      console.log(
+        "Run `awesome-progress-tracker status -g hermes` and `awesome-progress-tracker doctor -g hermes` to verify setup."
+      );
+    } else {
+      console.log("Restart Claude Code/Codex so it reloads MCP config.");
+    }
     if (parsed.verify) {
       printDoctor(await runDoctor({ agent: parsed.agent }));
     }
@@ -1041,7 +1081,11 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
     const result = parsed.scope === "project"
       ? await uninstallProjectMcp()
       : await uninstallAgent({ agent: parsed.agent });
-    console.log(`Removed Awesome Progress Tracker bootstrap for ${result.agent}.`);
+    if (result.agent === "hermes") {
+      console.log("Removed Awesome Progress Tracker Skill + MCP for Hermes.");
+    } else {
+      console.log(`Removed Awesome Progress Tracker bootstrap for ${result.agent}.`);
+    }
     for (const file of result.changedFiles) {
       console.log(`- ${file}`);
     }
