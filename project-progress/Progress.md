@@ -40,7 +40,7 @@ The user described losing project state across many folders, coding agents, term
 
 ## Next Action
 
-Review `docs/superpowers/specs/2026-08-12-hermes-skill-mcp-design.md`; after approval, write the implementation plan for the Hermes Skill + MCP integration.
+Resolve the Hermes release-scope conflict: existing ADR 0002 permits Skill + MCP work only as a prerequisite and gates public support on a native lifecycle plugin; the newly approved design describes Skill + MCP as the first integration release.
 
 ## Remaining Work
 
@@ -97,7 +97,7 @@ Review `docs/superpowers/specs/2026-08-12-hermes-skill-mcp-design.md`; after app
 
 ## Blockers
 
-None. Hermes lifecycle hooks are intentionally deferred from this first integration slice because their event protocol differs from Claude/Codex hooks.
+Release scope needs a user decision. Existing `docs/adr/0002-hermes-plugin-release-gate.md` says public Hermes compatibility is blocked on a native lifecycle plugin, while the current design proposes Skill + MCP as the first release slice.
 
 ## Deployment
 
