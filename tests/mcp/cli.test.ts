@@ -315,6 +315,216 @@ describe("npm CLI", () => {
     ]);
   });
 
+  it("reports Hermes status from managed list commands", async () => {
+    const calls: Array<{ command: string; args: string[]; stdin?: string }> = [];
+    const project = await fs.mkdtemp(path.join(os.tmpdir(), "project-progress-project-"));
+    await initProject({ cwd: project, projectName: "Hermes Project" });
+    const runner = async (command: string, args: string[], options?: { stdin?: string }) => {
+      calls.push({ command, args, stdin: options?.stdin });
+      if (args[0] === "skills" && args[1] === "list") {
+        return { stdout: "NAME SOURCE\nproject-progress hub\n", stderr: "" };
+      }
+      if (args[0] === "mcp" && args[1] === "list") {
+        return { stdout: "NAME STATUS\nawesome-progress-tracker enabled\n", stderr: "" };
+      }
+      throw new Error(`unexpected command: ${command} ${args.join(" ")}`);
+    };
+
+    expect(await readStatus({ agent: "hermes", cwd: project, commandRunner: runner })).toMatchObject({
+      agent: "hermes",
+      projectInitialized: true,
+      bootstrapInstalled: false,
+      skillInstalled: true,
+      mcpConfigured: true,
+      files: {
+        skill: "Hermes skill: project-progress",
+        mcpConfig: "Hermes MCP server: awesome-progress-tracker"
+      }
+    });
+    expect(calls).toEqual([
+      { command: "hermes", args: ["skills", "list", "--source", "hub"], stdin: undefined },
+      { command: "hermes", args: ["mcp", "list"], stdin: undefined }
+    ]);
+  });
+
+  it("uninstalls only present Hermes managed components and is idempotent", async () => {
+    const calls: Array<{ command: string; args: string[]; stdin?: string }> = [];
+    const runner = async (command: string, args: string[], options?: { stdin?: string }) => {
+      calls.push({ command, args, stdin: options?.stdin });
+      if (args[0] === "skills" && args[1] === "list") {
+        return { stdout: "NAME SOURCE\nproject-progress hub\n", stderr: "" };
+      }
+      if (args[0] === "mcp" && args[1] === "list") {
+        return { stdout: "NAME STATUS\nawesome-progress-tracker enabled\n", stderr: "" };
+      }
+      if (args[0] === "mcp" && args[1] === "remove") {
+        return { stdout: "", stderr: "" };
+      }
+      if (args[0] === "skills" && args[1] === "uninstall") {
+        return { stdout: "", stderr: "" };
+      }
+      throw new Error(`unexpected command: ${command} ${args.join(" ")}`);
+    };
+
+    await expect(uninstallAgent({ agent: "hermes", commandRunner: runner })).resolves.toEqual({
+      agent: "hermes",
+      changedFiles: ["Hermes MCP server: awesome-progress-tracker", "Hermes skill: project-progress"]
+    });
+
+    expect(calls).toEqual([
+      { command: "hermes", args: ["skills", "list", "--source", "hub"], stdin: undefined },
+      { command: "hermes", args: ["mcp", "list"], stdin: undefined },
+      { command: "hermes", args: ["mcp", "remove", "awesome-progress-tracker"], stdin: "y\n" },
+      { command: "hermes", args: ["skills", "uninstall", "project-progress"], stdin: "y\n" }
+    ]);
+
+    const idempotentCalls: Array<{ command: string; args: string[]; stdin?: string }> = [];
+    const idempotentRunner = async (command: string, args: string[], options?: { stdin?: string }) => {
+      idempotentCalls.push({ command, args, stdin: options?.stdin });
+      if (args[0] === "skills" && args[1] === "list") {
+        return { stdout: "NAME SOURCE\nother hub\n", stderr: "" };
+      }
+      if (args[0] === "mcp" && args[1] === "list") {
+        return { stdout: "NAME STATUS\nother enabled\n", stderr: "" };
+      }
+      throw new Error(`unexpected command: ${command} ${args.join(" ")}`);
+    };
+
+    await expect(uninstallAgent({ agent: "hermes", commandRunner: idempotentRunner })).resolves.toEqual({
+      agent: "hermes",
+      changedFiles: []
+    });
+    expect(idempotentCalls).toEqual([
+      { command: "hermes", args: ["skills", "list", "--source", "hub"], stdin: undefined },
+      { command: "hermes", args: ["mcp", "list"], stdin: undefined }
+    ]);
+  });
+
+  it("runs Hermes doctor checks including MCP connectivity", async () => {
+    const calls: Array<{ command: string; args: string[]; stdin?: string }> = [];
+    const project = await fs.mkdtemp(path.join(os.tmpdir(), "project-progress-project-"));
+    await initProject({ cwd: project, projectName: "Hermes Project" });
+    const home = await fs.mkdtemp(path.join(os.tmpdir(), "project-progress-home-"));
+    const runner = async (command: string, args: string[], options?: { stdin?: string }) => {
+      calls.push({ command, args, stdin: options?.stdin });
+      if (args[0] === "--version") {
+        return { stdout: "Hermes 1.2.3\n", stderr: "" };
+      }
+      if (args[0] === "skills" && args[1] === "list") {
+        return { stdout: "NAME SOURCE\nproject-progress hub\n", stderr: "" };
+      }
+      if (args[0] === "mcp" && args[1] === "list") {
+        return { stdout: "NAME STATUS\nawesome-progress-tracker enabled\n", stderr: "" };
+      }
+      if (args[0] === "mcp" && args[1] === "test") {
+        return { stdout: "connected\n", stderr: "" };
+      }
+      throw new Error(`unexpected command: ${command} ${args.join(" ")}`);
+    };
+
+    const doctor = await runDoctor({ agent: "hermes", cwd: project, homeDir: home, commandRunner: runner });
+
+    expect(doctor.agent).toBe("hermes");
+    expect(doctor.ok).toBe(true);
+    expect(doctor.checks.map((check) => check.name)).toEqual([
+      "hermes",
+      "skill",
+      "mcp",
+      "mcp-connection",
+      "index",
+      "project"
+    ]);
+    expect(doctor.checks.every((check) => check.ok)).toBe(true);
+    expect(calls).toEqual([
+      { command: "hermes", args: ["--version"], stdin: undefined },
+      { command: "hermes", args: ["skills", "list", "--source", "hub"], stdin: undefined },
+      { command: "hermes", args: ["mcp", "list"], stdin: undefined },
+      { command: "hermes", args: ["mcp", "test", "awesome-progress-tracker"], stdin: undefined }
+    ]);
+  });
+
+  it("reports Hermes doctor failures for missing executable and failed MCP connection tests", async () => {
+    const missingBinaryRunner = async () => {
+      throw new Error("spawn hermes ENOENT");
+    };
+    const missingDoctor = await runDoctor({ agent: "hermes", commandRunner: missingBinaryRunner });
+
+    expect(missingDoctor.ok).toBe(false);
+    expect(missingDoctor.checks.find((check) => check.name === "hermes")).toMatchObject({
+      ok: false,
+      message: expect.stringContaining("spawn hermes ENOENT")
+    });
+    expect(missingDoctor.checks.find((check) => check.name === "skill")).toMatchObject({ ok: false });
+    expect(missingDoctor.checks.find((check) => check.name === "mcp")).toMatchObject({ ok: false });
+    expect(missingDoctor.checks.find((check) => check.name === "mcp-connection")).toMatchObject({ ok: false });
+
+    const project = await fs.mkdtemp(path.join(os.tmpdir(), "project-progress-project-"));
+    const home = await fs.mkdtemp(path.join(os.tmpdir(), "project-progress-home-"));
+    const failingCalls: Array<{ command: string; args: string[]; stdin?: string }> = [];
+    const failingRunner = async (command: string, args: string[], options?: { stdin?: string }) => {
+      failingCalls.push({ command, args, stdin: options?.stdin });
+      if (args[0] === "--version") {
+        return { stdout: "Hermes 1.2.3\n", stderr: "" };
+      }
+      if (args[0] === "skills" && args[1] === "list") {
+        return { stdout: "NAME SOURCE\nproject-progress hub\n", stderr: "" };
+      }
+      if (args[0] === "mcp" && args[1] === "list") {
+        return { stdout: "NAME STATUS\nawesome-progress-tracker enabled\n", stderr: "" };
+      }
+      if (args[0] === "mcp" && args[1] === "test") {
+        throw new Error("connection refused");
+      }
+      throw new Error(`unexpected command: ${command} ${args.join(" ")}`);
+    };
+
+    const failingDoctor = await runDoctor({
+      agent: "hermes",
+      cwd: project,
+      homeDir: home,
+      commandRunner: failingRunner
+    });
+
+    expect(failingDoctor.ok).toBe(false);
+    expect(failingDoctor.checks.find((check) => check.name === "mcp-connection")).toMatchObject({
+      ok: false,
+      message: expect.stringContaining("connection refused")
+    });
+    expect(failingCalls).toContainEqual({
+      command: "hermes",
+      args: ["mcp", "test", "awesome-progress-tracker"],
+      stdin: undefined
+    });
+  });
+
+  it("identifies failed Hermes subcommands in lifecycle error output", async () => {
+    const statusRunner = async (_command: string, args: string[]) => {
+      if (args[0] === "skills" && args[1] === "list") {
+        throw new Error("permission denied");
+      }
+      return { stdout: "", stderr: "" };
+    };
+    await expect(readStatus({ agent: "hermes", commandRunner: statusRunner })).rejects.toThrow(
+      /hermes skills list --source hub[\s\S]*permission denied/
+    );
+
+    const uninstallRunner = async (_command: string, args: string[]) => {
+      if (args[0] === "skills" && args[1] === "list") {
+        return { stdout: "NAME SOURCE\nproject-progress hub\n", stderr: "" };
+      }
+      if (args[0] === "mcp" && args[1] === "list") {
+        return { stdout: "NAME STATUS\nawesome-progress-tracker enabled\n", stderr: "" };
+      }
+      if (args[0] === "mcp" && args[1] === "remove") {
+        throw new Error("remove failed");
+      }
+      return { stdout: "", stderr: "" };
+    };
+    await expect(uninstallAgent({ agent: "hermes", commandRunner: uninstallRunner })).rejects.toThrow(
+      /hermes mcp remove awesome-progress-tracker[\s\S]*remove failed/
+    );
+  });
+
   it("installs project-local MCP config without bootstrap instructions", async () => {
     const project = await fs.mkdtemp(path.join(os.tmpdir(), "project-progress-project-"));
 

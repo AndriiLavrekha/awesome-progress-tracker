@@ -457,6 +457,26 @@ function parseHermesMcpList(output: string): Set<string> {
   return parseHermesFirstColumnList(output);
 }
 
+function formatHermesCommand(args: string[]): string {
+  return ["hermes", ...args].join(" ");
+}
+
+function asErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+async function runHermesCommand(
+  commandRunner: CommandRunner,
+  args: string[],
+  options?: CommandRunnerOptions
+): Promise<{ stdout: string; stderr: string }> {
+  try {
+    return await commandRunner("hermes", args, options);
+  } catch (error) {
+    throw new Error(`Failed Hermes command: ${formatHermesCommand(args)}\n${asErrorMessage(error)}`);
+  }
+}
+
 export async function installAgent(options: InstallOptions = {}): Promise<InstallResult> {
   const agent = options.agent ?? "claude";
   const homeDir = options.homeDir ?? process.env.HOME ?? process.env.USERPROFILE;
@@ -491,12 +511,12 @@ export async function installAgent(options: InstallOptions = {}): Promise<Instal
     let skillAlreadyInstalled = false;
 
     if (!options.mcpOnly) {
-      const skillList = await commandRunner("hermes", ["skills", "list", "--source", "hub"]);
+      const skillList = await runHermesCommand(commandRunner, ["skills", "list", "--source", "hub"]);
       skillAlreadyInstalled = parseHermesSkillList(skillList.stdout).has(HERMES_SKILL_NAME);
       if (skillAlreadyInstalled) collisions.push(`Hermes skill already exists: ${HERMES_SKILL_NAME}`);
     }
 
-    const mcpList = await commandRunner("hermes", ["mcp", "list"]);
+    const mcpList = await runHermesCommand(commandRunner, ["mcp", "list"]);
     if (parseHermesMcpList(mcpList.stdout).has(HERMES_MCP_NAME)) {
       collisions.push(`Hermes MCP server already exists: ${HERMES_MCP_NAME}`);
     }
@@ -506,12 +526,12 @@ export async function installAgent(options: InstallOptions = {}): Promise<Instal
     }
 
     if (!options.mcpOnly) {
-      await commandRunner("hermes", ["skills", "install", hermesSkillUrl(), "--name", HERMES_SKILL_NAME, "--yes"]);
+      await runHermesCommand(commandRunner, ["skills", "install", hermesSkillUrl(), "--name", HERMES_SKILL_NAME, "--yes"]);
       writtenFiles.push(`Hermes skill: ${HERMES_SKILL_NAME}`);
     }
 
     try {
-      await commandRunner("hermes", [
+      await runHermesCommand(commandRunner, [
         "mcp",
         "add",
         HERMES_MCP_NAME,
@@ -527,10 +547,10 @@ export async function installAgent(options: InstallOptions = {}): Promise<Instal
     } catch (error) {
       if (!options.mcpOnly) {
         try {
-          await commandRunner("hermes", ["skills", "uninstall", HERMES_SKILL_NAME], { stdin: "y\n" });
+          await runHermesCommand(commandRunner, ["skills", "uninstall", HERMES_SKILL_NAME], { stdin: "y\n" });
         } catch (rollbackError) {
-          const message = error instanceof Error ? error.message : String(error);
-          const rollbackMessage = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
+          const message = asErrorMessage(error);
+          const rollbackMessage = asErrorMessage(rollbackError);
           throw new Error(`${message}\nRollback failed: ${rollbackMessage}`);
         }
       }
@@ -572,6 +592,26 @@ export async function uninstallAgent(options: UninstallOptions = {}): Promise<Un
     if (await removeTextBlock(claudeMemory, BOOTSTRAP_START, BOOTSTRAP_END)) changedFiles.push(claudeMemory);
     const claudeConfig = path.join(homeDir, ".claude.json");
     if (await removeClaudeMcpConfig(claudeConfig)) changedFiles.push(claudeConfig);
+    return { agent, changedFiles };
+  }
+
+  if (agent === "hermes") {
+    const commandRunner = options.commandRunner ?? defaultCommandRunner;
+    const skillList = await runHermesCommand(commandRunner, ["skills", "list", "--source", "hub"]);
+    const mcpList = await runHermesCommand(commandRunner, ["mcp", "list"]);
+    const skillInstalled = parseHermesSkillList(skillList.stdout).has(HERMES_SKILL_NAME);
+    const mcpConfigured = parseHermesMcpList(mcpList.stdout).has(HERMES_MCP_NAME);
+
+    if (mcpConfigured) {
+      await runHermesCommand(commandRunner, ["mcp", "remove", HERMES_MCP_NAME], { stdin: "y\n" });
+      changedFiles.push(`Hermes MCP server: ${HERMES_MCP_NAME}`);
+    }
+
+    if (skillInstalled) {
+      await runHermesCommand(commandRunner, ["skills", "uninstall", HERMES_SKILL_NAME], { stdin: "y\n" });
+      changedFiles.push(`Hermes skill: ${HERMES_SKILL_NAME}`);
+    }
+
     return { agent, changedFiles };
   }
 
@@ -628,6 +668,24 @@ export async function readStatus(options: StatusOptions = {}): Promise<StatusRes
     };
   }
 
+  if (agent === "hermes") {
+    const commandRunner = options.commandRunner ?? defaultCommandRunner;
+    const skillList = await runHermesCommand(commandRunner, ["skills", "list", "--source", "hub"]);
+    const mcpList = await runHermesCommand(commandRunner, ["mcp", "list"]);
+    return {
+      agent,
+      projectInitialized: await pathExists(projectProgress),
+      bootstrapInstalled: false,
+      mcpConfigured: parseHermesMcpList(mcpList.stdout).has(HERMES_MCP_NAME),
+      skillInstalled: parseHermesSkillList(skillList.stdout).has(HERMES_SKILL_NAME),
+      files: {
+        skill: `Hermes skill: ${HERMES_SKILL_NAME}`,
+        mcpConfig: `Hermes MCP server: ${HERMES_MCP_NAME}`,
+        projectProgress
+      }
+    };
+  }
+
   const codexAgents = path.join(homeDir, ".codex", "AGENTS.md");
   const codexSkill = path.join(homeDir, ".codex", "skills", "awesome-progress-tracker", "SKILL.md");
   const codexConfig = path.join(homeDir, ".codex", "config.toml");
@@ -674,6 +732,83 @@ export async function runDoctor(options: StatusOptions = {}): Promise<DoctorResu
   const agent = options.agent ?? "claude";
   const homeDir = options.homeDir ?? process.env.HOME ?? process.env.USERPROFILE;
   if (!homeDir) throw new Error("Could not determine the user home directory.");
+
+  if (agent === "hermes") {
+    const commandRunner = options.commandRunner ?? defaultCommandRunner;
+    const projectPath = path.join(options.cwd ?? process.cwd(), "project-progress", "Progress.md");
+    let hermesAvailable = false;
+    let hermesMessage = "Hermes CLI is available";
+    try {
+      await runHermesCommand(commandRunner, ["--version"]);
+      hermesAvailable = true;
+    } catch (error) {
+      hermesMessage = asErrorMessage(error);
+    }
+
+    let skillInstalled = false;
+    let skillMessage = "Hermes skill is missing";
+    let mcpConfigured = false;
+    let mcpMessage = "Hermes MCP server is missing";
+
+    if (hermesAvailable) {
+      try {
+        const skillList = await runHermesCommand(commandRunner, ["skills", "list", "--source", "hub"]);
+        skillInstalled = parseHermesSkillList(skillList.stdout).has(HERMES_SKILL_NAME);
+        skillMessage = skillInstalled ? "Hermes skill is installed" : "Hermes skill is missing";
+      } catch (error) {
+        skillMessage = asErrorMessage(error);
+      }
+
+      try {
+        const mcpList = await runHermesCommand(commandRunner, ["mcp", "list"]);
+        mcpConfigured = parseHermesMcpList(mcpList.stdout).has(HERMES_MCP_NAME);
+        mcpMessage = mcpConfigured ? "Hermes MCP server is installed" : "Hermes MCP server is missing";
+      } catch (error) {
+        mcpMessage = asErrorMessage(error);
+      }
+    } else {
+      skillMessage = hermesMessage;
+      mcpMessage = hermesMessage;
+    }
+
+    let mcpConnectionOk = false;
+    let mcpConnectionMessage = mcpConfigured
+      ? "Hermes MCP connection has not been tested yet"
+      : "Hermes MCP server is not configured";
+
+    if (!hermesAvailable) {
+      mcpConnectionMessage = hermesMessage;
+    } else if (mcpConfigured) {
+      try {
+        await runHermesCommand(commandRunner, ["mcp", "test", HERMES_MCP_NAME]);
+        mcpConnectionOk = true;
+        mcpConnectionMessage = "Hermes MCP connection test passed";
+      } catch (error) {
+        mcpConnectionMessage = asErrorMessage(error);
+      }
+    }
+
+    const checks: DoctorCheck[] = [
+      { name: "hermes", ok: hermesAvailable, message: hermesMessage },
+      { name: "skill", ok: skillInstalled, message: skillMessage },
+      { name: "mcp", ok: mcpConfigured, message: mcpMessage },
+      { name: "mcp-connection", ok: mcpConnectionOk, message: mcpConnectionMessage },
+      await checkIndexWritable(homeDir),
+      {
+        name: "project",
+        ok: true,
+        message: (await pathExists(projectPath))
+          ? "current project has project-progress/Progress.md"
+          : "current project is not initialized; the agent should ask before initializing"
+      }
+    ];
+
+    return {
+      agent,
+      ok: checks.every((check) => check.ok),
+      checks
+    };
+  }
 
   const status = await readStatus(options);
   const checks: DoctorCheck[] = [
