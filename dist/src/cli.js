@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { promises as fs } from "node:fs";
-import { existsSync } from "node:fs";
-import { execFile } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import { execFile, spawn } from "node:child_process";
 import path from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -29,19 +29,63 @@ const execFileAsync = promisify(execFile);
 const TEMPLATE_DIR = path.join(PACKAGE_ROOT, "templates", "project-progress");
 const MCP_SERVER_NAME = "awesome-progress-tracker";
 const PACKAGE_SPEC = "github:AndriiLavrekha/awesome-progress-tracker";
+const PACKAGE_VERSION = JSON.parse(readFileSync(path.join(PACKAGE_ROOT, "package.json"), "utf-8")).version;
+const HERMES_SKILL_NAME = "project-progress";
+const HERMES_MCP_NAME = MCP_SERVER_NAME;
 const BOOTSTRAP_START = "<!-- awesome-progress-tracker:start -->";
 const BOOTSTRAP_END = "<!-- awesome-progress-tracker:end -->";
 const CODEX_MCP_START = "# awesome-progress-tracker:mcp:start";
 const CODEX_MCP_END = "# awesome-progress-tracker:mcp:end";
+export const defaultCommandRunner = async (command, args, options = {}) => {
+    const child = spawn(command, args, {
+        stdio: "pipe",
+        windowsHide: true
+    });
+    const stdoutChunks = [];
+    const stderrChunks = [];
+    let timeoutId;
+    child.stdout.on("data", (chunk) => {
+        stdoutChunks.push(chunk);
+    });
+    child.stderr.on("data", (chunk) => {
+        stderrChunks.push(chunk);
+    });
+    if (options.stdin !== undefined) {
+        child.stdin.write(options.stdin);
+    }
+    child.stdin.end();
+    return await new Promise((resolve, reject) => {
+        child.on("error", reject);
+        if (options.timeout !== undefined) {
+            timeoutId = setTimeout(() => {
+                child.kill();
+                reject(new Error(`Command timed out after ${options.timeout}ms: ${command}`));
+            }, options.timeout);
+        }
+        child.on("close", (code, signal) => {
+            if (timeoutId)
+                clearTimeout(timeoutId);
+            const stdout = Buffer.concat(stdoutChunks).toString("utf-8");
+            const stderr = Buffer.concat(stderrChunks).toString("utf-8");
+            if (code === 0) {
+                resolve({ stdout, stderr });
+                return;
+            }
+            reject(new Error(signal
+                ? `Command failed with signal ${signal}: ${command}`
+                : `Command failed with exit code ${code ?? "unknown"}: ${command}\n${stderr || stdout}`.trimEnd()));
+        });
+    });
+};
 export function helpText() {
     return `Project Progress
 
 Usage:
-  awesome-progress-tracker install [-g claude|codex] [--roots <paths>] [--verify]
-  awesome-progress-tracker install-mcp [-g claude|codex] [--roots <paths>] [--local] [--verify]
-  awesome-progress-tracker doctor [-g claude|codex] [--json]
-  awesome-progress-tracker uninstall [-g claude|codex] [--scope project]
-  awesome-progress-tracker status [-g claude|codex]
+  awesome-progress-tracker install [-g claude|codex|hermes] [--roots <paths>] [--verify]
+  awesome-progress-tracker install-mcp [-g claude|codex|hermes] [--roots <paths>] [--local] [--verify]
+  awesome-progress-tracker doctor [-g claude|codex|hermes] [--json]
+  awesome-progress-tracker uninstall [-g claude|codex|hermes] [--scope project]
+  awesome-progress-tracker status [-g claude|codex|hermes]
   awesome-progress-tracker state list
   awesome-progress-tracker state set [directory] --state opted-in|opted-out|initialized|unknown
   awesome-progress-tracker state reset [directory]
@@ -50,7 +94,7 @@ Usage:
   awesome-progress-tracker help
 
 Commands:
-  install  Install global bootstrap instructions for Claude Code or Codex.
+  install  Install global bootstrap instructions for Claude Code, Codex, or Hermes.
   install-mcp  Install only MCP configuration.
   doctor  Verify npx, bootstrap, MCP config, and project/index state.
   uninstall  Remove installed bootstrap instructions and MCP config.
@@ -254,6 +298,50 @@ async function fileContains(filePath, value) {
         return false;
     return (await fs.readFile(filePath, "utf-8")).includes(value);
 }
+function hermesSkillUrl() {
+    return `https://raw.githubusercontent.com/AndriiLavrekha/awesome-progress-tracker/v${PACKAGE_VERSION}/skills/project-progress/SKILL.md`;
+}
+function stripAnsi(value) {
+    return value.replace(/\u001B\[[0-?]*[ -/]*[@-~]/g, "");
+}
+function parseHermesFirstColumnList(output) {
+    const names = new Set();
+    for (const line of stripAnsi(output).split(/\r?\n/)) {
+        const trimmed = line.trimStart();
+        if (!trimmed)
+            continue;
+        if (/^[\u2500-\u257F\s]+$/u.test(trimmed))
+            continue;
+        const boxTableCells = [...trimmed.matchAll(/│([^│]*)/g)].map((match) => match[1].trim()).filter(Boolean);
+        const firstColumn = boxTableCells[0] ?? trimmed.match(/^(\S+)/)?.[1];
+        if (!firstColumn)
+            continue;
+        if (firstColumn.toLowerCase() === "name")
+            continue;
+        names.add(firstColumn);
+    }
+    return names;
+}
+function parseHermesSkillList(output) {
+    return parseHermesFirstColumnList(output);
+}
+function parseHermesMcpList(output) {
+    return parseHermesFirstColumnList(output);
+}
+function formatHermesCommand(args) {
+    return ["hermes", ...args].join(" ");
+}
+function asErrorMessage(error) {
+    return error instanceof Error ? error.message : String(error);
+}
+async function runHermesCommand(commandRunner, args, options) {
+    try {
+        return await commandRunner("hermes", args, options);
+    }
+    catch (error) {
+        throw new Error(`Failed Hermes command: ${formatHermesCommand(args)}\n${asErrorMessage(error)}`);
+    }
+}
 export async function installAgent(options = {}) {
     const agent = options.agent ?? "claude";
     const homeDir = options.homeDir ?? process.env.HOME ?? process.env.USERPROFILE;
@@ -276,6 +364,62 @@ export async function installAgent(options = {}) {
         const claudeConfig = path.join(homeDir, ".claude.json");
         await installClaudeMcpConfig(claudeConfig, roots);
         writtenFiles.push(claudeConfig);
+        return { agent, writtenFiles };
+    }
+    if (agent === "hermes") {
+        const commandRunner = options.commandRunner ?? defaultCommandRunner;
+        const collisions = [];
+        let skillAlreadyInstalled = false;
+        if (!options.mcpOnly) {
+            const skillList = await runHermesCommand(commandRunner, ["skills", "list", "--source", "hub"]);
+            skillAlreadyInstalled = parseHermesSkillList(skillList.stdout).has(HERMES_SKILL_NAME);
+            if (skillAlreadyInstalled)
+                collisions.push(`Hermes skill already exists: ${HERMES_SKILL_NAME}`);
+        }
+        const mcpList = await runHermesCommand(commandRunner, ["mcp", "list"]);
+        if (parseHermesMcpList(mcpList.stdout).has(HERMES_MCP_NAME)) {
+            collisions.push(`Hermes MCP server already exists: ${HERMES_MCP_NAME}`);
+        }
+        if (collisions.length > 0) {
+            throw new Error(collisions.join("\n"));
+        }
+        if (!options.mcpOnly) {
+            await runHermesCommand(commandRunner, ["skills", "install", hermesSkillUrl(), "--name", HERMES_SKILL_NAME, "--yes"]);
+            writtenFiles.push(`Hermes skill: ${HERMES_SKILL_NAME}`);
+        }
+        try {
+            await runHermesCommand(commandRunner, [
+                "mcp",
+                "add",
+                HERMES_MCP_NAME,
+                "--command",
+                "npx",
+                "--env",
+                `PROJECT_PROGRESS_ROOTS=${roots}`,
+                "--args",
+                "-y",
+                PACKAGE_SPEC,
+                "mcp"
+            ], { stdin: "y\n" });
+            const updatedMcpList = await runHermesCommand(commandRunner, ["mcp", "list"]);
+            if (!parseHermesMcpList(updatedMcpList.stdout).has(HERMES_MCP_NAME)) {
+                throw new Error(`Hermes MCP server was not present after add: ${HERMES_MCP_NAME}`);
+            }
+        }
+        catch (error) {
+            if (!options.mcpOnly) {
+                try {
+                    await runHermesCommand(commandRunner, ["skills", "uninstall", HERMES_SKILL_NAME], { stdin: "y\n" });
+                }
+                catch (rollbackError) {
+                    const message = asErrorMessage(error);
+                    const rollbackMessage = asErrorMessage(rollbackError);
+                    throw new Error(`${message}\nRollback failed: ${rollbackMessage}`);
+                }
+            }
+            throw error;
+        }
+        writtenFiles.push(`Hermes MCP server: ${HERMES_MCP_NAME}`);
         return { agent, writtenFiles };
     }
     if (!options.mcpOnly) {
@@ -306,6 +450,22 @@ export async function uninstallAgent(options = {}) {
         const claudeConfig = path.join(homeDir, ".claude.json");
         if (await removeClaudeMcpConfig(claudeConfig))
             changedFiles.push(claudeConfig);
+        return { agent, changedFiles };
+    }
+    if (agent === "hermes") {
+        const commandRunner = options.commandRunner ?? defaultCommandRunner;
+        const skillList = await runHermesCommand(commandRunner, ["skills", "list", "--source", "hub"]);
+        const mcpList = await runHermesCommand(commandRunner, ["mcp", "list"]);
+        const skillInstalled = parseHermesSkillList(skillList.stdout).has(HERMES_SKILL_NAME);
+        const mcpConfigured = parseHermesMcpList(mcpList.stdout).has(HERMES_MCP_NAME);
+        if (mcpConfigured) {
+            await runHermesCommand(commandRunner, ["mcp", "remove", HERMES_MCP_NAME], { stdin: "y\n" });
+            changedFiles.push(`Hermes MCP server: ${HERMES_MCP_NAME}`);
+        }
+        if (skillInstalled) {
+            await runHermesCommand(commandRunner, ["skills", "uninstall", HERMES_SKILL_NAME], { stdin: "y\n" });
+            changedFiles.push(`Hermes skill: ${HERMES_SKILL_NAME}`);
+        }
         return { agent, changedFiles };
     }
     const codexAgents = path.join(homeDir, ".codex", "AGENTS.md");
@@ -355,6 +515,23 @@ export async function readStatus(options = {}) {
             }
         };
     }
+    if (agent === "hermes") {
+        const commandRunner = options.commandRunner ?? defaultCommandRunner;
+        const skillList = await runHermesCommand(commandRunner, ["skills", "list", "--source", "hub"]);
+        const mcpList = await runHermesCommand(commandRunner, ["mcp", "list"]);
+        return {
+            agent,
+            projectInitialized: await pathExists(projectProgress),
+            bootstrapInstalled: false,
+            mcpConfigured: parseHermesMcpList(mcpList.stdout).has(HERMES_MCP_NAME),
+            skillInstalled: parseHermesSkillList(skillList.stdout).has(HERMES_SKILL_NAME),
+            files: {
+                skill: `Hermes skill: ${HERMES_SKILL_NAME}`,
+                mcpConfig: `Hermes MCP server: ${HERMES_MCP_NAME}`,
+                projectProgress
+            }
+        };
+    }
     const codexAgents = path.join(homeDir, ".codex", "AGENTS.md");
     const codexSkill = path.join(homeDir, ".codex", "skills", "awesome-progress-tracker", "SKILL.md");
     const codexConfig = path.join(homeDir, ".codex", "config.toml");
@@ -400,6 +577,81 @@ export async function runDoctor(options = {}) {
     const homeDir = options.homeDir ?? process.env.HOME ?? process.env.USERPROFILE;
     if (!homeDir)
         throw new Error("Could not determine the user home directory.");
+    if (agent === "hermes") {
+        const commandRunner = options.commandRunner ?? defaultCommandRunner;
+        const projectPath = path.join(options.cwd ?? process.cwd(), "project-progress", "Progress.md");
+        let hermesAvailable = false;
+        let hermesMessage = "Hermes CLI is available";
+        try {
+            await runHermesCommand(commandRunner, ["--version"]);
+            hermesAvailable = true;
+        }
+        catch (error) {
+            hermesMessage = asErrorMessage(error);
+        }
+        let skillInstalled = false;
+        let skillMessage = "Hermes skill is missing";
+        let mcpConfigured = false;
+        let mcpMessage = "Hermes MCP server is missing";
+        if (hermesAvailable) {
+            try {
+                const skillList = await runHermesCommand(commandRunner, ["skills", "list", "--source", "hub"]);
+                skillInstalled = parseHermesSkillList(skillList.stdout).has(HERMES_SKILL_NAME);
+                skillMessage = skillInstalled ? "Hermes skill is installed" : "Hermes skill is missing";
+            }
+            catch (error) {
+                skillMessage = asErrorMessage(error);
+            }
+            try {
+                const mcpList = await runHermesCommand(commandRunner, ["mcp", "list"]);
+                mcpConfigured = parseHermesMcpList(mcpList.stdout).has(HERMES_MCP_NAME);
+                mcpMessage = mcpConfigured ? "Hermes MCP server is installed" : "Hermes MCP server is missing";
+            }
+            catch (error) {
+                mcpMessage = asErrorMessage(error);
+            }
+        }
+        else {
+            skillMessage = hermesMessage;
+            mcpMessage = hermesMessage;
+        }
+        let mcpConnectionOk = false;
+        let mcpConnectionMessage = mcpConfigured
+            ? "Hermes MCP connection has not been tested yet"
+            : "Hermes MCP server is not configured";
+        if (!hermesAvailable) {
+            mcpConnectionMessage = hermesMessage;
+        }
+        else if (mcpConfigured) {
+            try {
+                await runHermesCommand(commandRunner, ["mcp", "test", HERMES_MCP_NAME]);
+                mcpConnectionOk = true;
+                mcpConnectionMessage = "Hermes MCP connection test passed";
+            }
+            catch (error) {
+                mcpConnectionMessage = asErrorMessage(error);
+            }
+        }
+        const checks = [
+            { name: "hermes", ok: hermesAvailable, message: hermesMessage },
+            { name: "skill", ok: skillInstalled, message: skillMessage },
+            { name: "mcp", ok: mcpConfigured, message: mcpMessage },
+            { name: "mcp-connection", ok: mcpConnectionOk, message: mcpConnectionMessage },
+            await checkIndexWritable(homeDir),
+            {
+                name: "project",
+                ok: true,
+                message: (await pathExists(projectPath))
+                    ? "current project has project-progress/Progress.md"
+                    : "current project is not initialized; the agent should ask before initializing"
+            }
+        ];
+        return {
+            agent,
+            ok: checks.every((check) => check.ok),
+            checks
+        };
+    }
     const status = await readStatus(options);
     const checks = [
         await checkNpx(),
@@ -464,16 +716,16 @@ export function parseArgs(argv) {
         }
         else if (arg === "-g" || arg === "--agent") {
             const value = rest[index + 1];
-            if (value !== "claude" && value !== "codex") {
-                throw new Error(`${arg} requires claude or codex`);
+            if (value !== "claude" && value !== "codex" && value !== "hermes") {
+                throw new Error(`${arg} requires claude, codex, or hermes`);
             }
             parsed.agent = value;
             index += 1;
         }
         else if (arg.startsWith("--agent=")) {
             const value = arg.slice("--agent=".length);
-            if (value !== "claude" && value !== "codex") {
-                throw new Error("--agent requires claude or codex");
+            if (value !== "claude" && value !== "codex" && value !== "hermes") {
+                throw new Error("--agent requires claude, codex, or hermes");
             }
             parsed.agent = value;
         }
