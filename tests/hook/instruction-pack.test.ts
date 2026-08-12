@@ -32,7 +32,7 @@ describe("instruction pack", () => {
       "npm pack",
       "PACKAGE_TGZ",
       "pkg.name}-${pkg.version}.tgz",
-      'npx --yes "./$PACKAGE_TGZ" install -g hermes',
+      'npx --yes --package="$PACKAGE_TGZ" awesome-progress-tracker install -g hermes',
       "hermes skills list --source hub",
       "hermes mcp list",
       "hermes mcp test awesome-progress-tracker",

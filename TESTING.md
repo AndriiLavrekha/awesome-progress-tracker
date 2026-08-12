@@ -275,7 +275,7 @@ PACKAGE_TGZ="$(node -p "const pkg=require('./package.json'); `${pkg.name}-${pkg.
 
 ```bash
 export HERMES_HOME="$(mktemp -d)"
-npx --yes "./$PACKAGE_TGZ" install -g hermes --roots "C:/path/to/projects"
+npx --yes --package="$PACKAGE_TGZ" awesome-progress-tracker install -g hermes --roots "C:/path/to/projects"
 ```
 
 3. Verify the managed registrations:
@@ -284,7 +284,7 @@ npx --yes "./$PACKAGE_TGZ" install -g hermes --roots "C:/path/to/projects"
 hermes skills list --source hub
 hermes mcp list
 hermes mcp test awesome-progress-tracker
-npx --yes "./$PACKAGE_TGZ" doctor -g hermes
+npx --yes --package="$PACKAGE_TGZ" awesome-progress-tracker doctor -g hermes
 ```
 
 4. Start Hermes against a temporary initialized project and smoke the agent-facing tool flow:
@@ -296,13 +296,13 @@ npx --yes "./$PACKAGE_TGZ" doctor -g hermes
 5. Verify the opt-out path on an uninitialized disposable repo:
 
 ```bash
-npx --yes "./$PACKAGE_TGZ" state set /path/to/repo --state opted-out
+npx --yes --package="$PACKAGE_TGZ" awesome-progress-tracker state set /path/to/repo --state opted-out
 ```
 
 6. Remove the managed Hermes entries:
 
 ```bash
-npx --yes "./$PACKAGE_TGZ" uninstall -g hermes
+npx --yes --package="$PACKAGE_TGZ" awesome-progress-tracker uninstall -g hermes
 ```
 
 Expected:
