@@ -15,6 +15,7 @@ describe("instruction pack", () => {
     const text = await read("README.md");
     assertContainsAll(text, [
       "Hermes Agent",
+      "supported Skill + MCP installation",
       "npm install -g hermes",
       "hermes install -g github:AndriiLavrekha/awesome-progress-tracker",
       "`install`, `doctor`, and `uninstall` commands",
@@ -29,6 +30,9 @@ describe("instruction pack", () => {
     assertContainsAll(text, [
       "HERMES_HOME",
       "npm pack",
+      "PACKAGE_TGZ",
+      "pkg.name}-${pkg.version}.tgz",
+      'npx --yes "./$PACKAGE_TGZ" install -g hermes',
       "hermes skills list --source hub",
       "hermes mcp list",
       "hermes mcp test awesome-progress-tracker",

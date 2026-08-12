@@ -46,6 +46,7 @@ new session ◄── SessionStart hook injects the snapshot, no lookup needed �
 | --- | --- |
 | **Claude Code** | [Install As A Claude Code Plugin](#install-as-a-claude-code-plugin-recommended) — zero-config, one marketplace add |
 | **Codex** | [Install As A Codex Plugin](#install-as-a-codex-plugin-recommended) — native plugin flow, no `config.toml` editing |
+| **Hermes Agent** | [Install For Hermes Agent](#install-for-hermes-agent) â€” supported Skill + MCP installation; lifecycle hooks are deferred |
 | **Gemini CLI / Copilot / Cursor** | Drop `skills/project-progress/SKILL.md` into `~/.agents/skills` or a repo's `.agents/skills` |
 | **MCP client or CLI only** | [Install With npm/npx](#initialize-a-project) and, if needed, [MCP Server](#mcp-server) |
 

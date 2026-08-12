@@ -268,13 +268,14 @@ Use a temporary `HERMES_HOME` so the test never changes your real Hermes profile
 
 ```bash
 npm pack
+PACKAGE_TGZ="$(node -p "const pkg=require('./package.json'); `${pkg.name}-${pkg.version}.tgz`")"
 ```
 
 2. In a disposable shell, point Hermes at an isolated home and install the packaged CLI:
 
 ```bash
 export HERMES_HOME="$(mktemp -d)"
-npx --yes ./awesome-progress-tracker-0.3.0.tgz install -g hermes --roots "C:/path/to/projects"
+npx --yes "./$PACKAGE_TGZ" install -g hermes --roots "C:/path/to/projects"
 ```
 
 3. Verify the managed registrations:
@@ -283,7 +284,7 @@ npx --yes ./awesome-progress-tracker-0.3.0.tgz install -g hermes --roots "C:/pat
 hermes skills list --source hub
 hermes mcp list
 hermes mcp test awesome-progress-tracker
-npx --yes ./awesome-progress-tracker-0.3.0.tgz doctor -g hermes
+npx --yes "./$PACKAGE_TGZ" doctor -g hermes
 ```
 
 4. Start Hermes against a temporary initialized project and smoke the agent-facing tool flow:
@@ -295,13 +296,13 @@ npx --yes ./awesome-progress-tracker-0.3.0.tgz doctor -g hermes
 5. Verify the opt-out path on an uninitialized disposable repo:
 
 ```bash
-npx --yes ./awesome-progress-tracker-0.3.0.tgz state set /path/to/repo --state opted-out
+npx --yes "./$PACKAGE_TGZ" state set /path/to/repo --state opted-out
 ```
 
 6. Remove the managed Hermes entries:
 
 ```bash
-npx --yes ./awesome-progress-tracker-0.3.0.tgz uninstall -g hermes
+npx --yes "./$PACKAGE_TGZ" uninstall -g hermes
 ```
 
 Expected:
