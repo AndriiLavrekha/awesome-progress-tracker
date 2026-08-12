@@ -67,7 +67,7 @@ Choose the execution mode for `docs/superpowers/plans/2026-08-12-hermes-skill-mc
 - [x] Add MCP setup helper commands and verification.
 - [x] Add manual and agent-led test instructions.
 - [x] Commit and release the pre-edit reminder hook (`v0.2.3`).
-- [ ] Review and approve the Hermes Skill + MCP integration specification.
+- [x] Review and approve the Hermes Skill + MCP integration specification.
 - [x] Approve the Hermes Skill + MCP integration specification and supersede the lifecycle-plugin release gate.
 - [x] Write the Hermes Skill + MCP implementation plan.
 - [ ] Implement Hermes CLI-backed install, status, doctor, and uninstall workflows with focused tests.

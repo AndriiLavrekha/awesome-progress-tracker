@@ -58,6 +58,7 @@ describe("npm CLI", () => {
     expect(parseArgs(["install", "-g", "hermes"]).agent).toBe("hermes");
     expect(parseArgs(["install", "--agent=hermes"]).agent).toBe("hermes");
     expect(helpText()).toContain("claude|codex|hermes");
+    expect(helpText()).toContain("Claude Code, Codex, or Hermes");
     expect(parseArgs(["install", "-g", "codex", "--roots", "C:/one;C:/two"]).roots).toBe("C:/one;C:/two");
     expect(parseArgs(["install", "--verify"]).verify).toBe(true);
     expect(parseArgs(["doctor", "--json"])).toMatchObject({ command: "doctor", json: true });

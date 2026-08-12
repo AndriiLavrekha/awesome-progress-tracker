@@ -198,7 +198,7 @@ Usage:
   awesome-progress-tracker help
 
 Commands:
-  install  Install global bootstrap instructions for Claude Code or Codex.
+  install  Install global bootstrap instructions for Claude Code, Codex, or Hermes.
   install-mcp  Install only MCP configuration.
   doctor  Verify npx, bootstrap, MCP config, and project/index state.
   uninstall  Remove installed bootstrap instructions and MCP config.
@@ -453,10 +453,6 @@ export async function installAgent(options: InstallOptions = {}): Promise<Instal
     return { agent, writtenFiles };
   }
 
-  if (agent === "hermes") {
-    throw new Error("Hermes installation is not implemented yet.");
-  }
-
   if (!options.mcpOnly) {
     const codexAgents = path.join(homeDir, ".codex", "AGENTS.md");
     await writeManagedBlock(codexAgents, bootstrapBlock(agent));
@@ -489,10 +485,6 @@ export async function uninstallAgent(options: UninstallOptions = {}): Promise<Un
     const claudeConfig = path.join(homeDir, ".claude.json");
     if (await removeClaudeMcpConfig(claudeConfig)) changedFiles.push(claudeConfig);
     return { agent, changedFiles };
-  }
-
-  if (agent === "hermes") {
-    throw new Error("Hermes uninstall is not implemented yet.");
   }
 
   const codexAgents = path.join(homeDir, ".codex", "AGENTS.md");
@@ -546,10 +538,6 @@ export async function readStatus(options: StatusOptions = {}): Promise<StatusRes
         projectProgress
       }
     };
-  }
-
-  if (agent === "hermes") {
-    throw new Error("Hermes status is not implemented yet.");
   }
 
   const codexAgents = path.join(homeDir, ".codex", "AGENTS.md");
