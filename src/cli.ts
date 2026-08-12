@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { promises as fs } from "node:fs";
 import { existsSync } from "node:fs";
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import path from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -53,7 +53,18 @@ export interface InitResult {
   createdFiles: string[];
 }
 
-export type AgentTarget = "claude" | "codex";
+export type AgentTarget = "claude" | "codex" | "hermes";
+
+export interface CommandRunnerOptions {
+  stdin?: string;
+  timeout?: number;
+}
+
+export type CommandRunner = (
+  command: string,
+  args: string[],
+  options?: CommandRunnerOptions
+) => Promise<{ stdout: string; stderr: string }>;
 
 export interface InstallOptions {
   agent?: AgentTarget;
@@ -62,6 +73,7 @@ export interface InstallOptions {
   roots?: string;
   mcpOnly?: boolean;
   scope?: InstallScope;
+  commandRunner?: CommandRunner;
 }
 
 export interface InstallResult {
@@ -73,6 +85,7 @@ export interface StatusOptions {
   agent?: AgentTarget;
   homeDir?: string;
   cwd?: string;
+  commandRunner?: CommandRunner;
 }
 
 export interface StatusResult {
@@ -89,6 +102,7 @@ export type InstallScope = "user" | "project";
 export interface UninstallOptions {
   agent?: AgentTarget;
   homeDir?: string;
+  commandRunner?: CommandRunner;
 }
 
 export interface UninstallResult {
@@ -113,15 +127,69 @@ const BOOTSTRAP_END = "<!-- awesome-progress-tracker:end -->";
 const CODEX_MCP_START = "# awesome-progress-tracker:mcp:start";
 const CODEX_MCP_END = "# awesome-progress-tracker:mcp:end";
 
+export const defaultCommandRunner: CommandRunner = async (command, args, options = {}) => {
+  const child = spawn(command, args, {
+    stdio: "pipe",
+    windowsHide: true
+  });
+
+  const stdoutChunks: Buffer[] = [];
+  const stderrChunks: Buffer[] = [];
+  let timeoutId: NodeJS.Timeout | undefined;
+
+  child.stdout.on("data", (chunk: Buffer) => {
+    stdoutChunks.push(chunk);
+  });
+  child.stderr.on("data", (chunk: Buffer) => {
+    stderrChunks.push(chunk);
+  });
+
+  if (options.stdin !== undefined) {
+    child.stdin.write(options.stdin);
+  }
+  child.stdin.end();
+
+  return await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
+    child.on("error", reject);
+
+    if (options.timeout !== undefined) {
+      timeoutId = setTimeout(() => {
+        child.kill();
+        reject(new Error(`Command timed out after ${options.timeout}ms: ${command}`));
+      }, options.timeout);
+    }
+
+    child.on("close", (code, signal) => {
+      if (timeoutId) clearTimeout(timeoutId);
+
+      const stdout = Buffer.concat(stdoutChunks).toString("utf-8");
+      const stderr = Buffer.concat(stderrChunks).toString("utf-8");
+
+      if (code === 0) {
+        resolve({ stdout, stderr });
+        return;
+      }
+
+      reject(
+        new Error(
+          signal
+            ? `Command failed with signal ${signal}: ${command}`
+            : `Command failed with exit code ${code ?? "unknown"}: ${command}\n${stderr || stdout}`.trimEnd()
+        )
+      );
+    });
+  });
+};
+
 export function helpText(): string {
   return `Project Progress
 
 Usage:
-  awesome-progress-tracker install [-g claude|codex] [--roots <paths>] [--verify]
-  awesome-progress-tracker install-mcp [-g claude|codex] [--roots <paths>] [--local] [--verify]
-  awesome-progress-tracker doctor [-g claude|codex] [--json]
-  awesome-progress-tracker uninstall [-g claude|codex] [--scope project]
-  awesome-progress-tracker status [-g claude|codex]
+  awesome-progress-tracker install [-g claude|codex|hermes] [--roots <paths>] [--verify]
+  awesome-progress-tracker install-mcp [-g claude|codex|hermes] [--roots <paths>] [--local] [--verify]
+  awesome-progress-tracker doctor [-g claude|codex|hermes] [--json]
+  awesome-progress-tracker uninstall [-g claude|codex|hermes] [--scope project]
+  awesome-progress-tracker status [-g claude|codex|hermes]
   awesome-progress-tracker state list
   awesome-progress-tracker state set [directory] --state opted-in|opted-out|initialized|unknown
   awesome-progress-tracker state reset [directory]
@@ -385,6 +453,10 @@ export async function installAgent(options: InstallOptions = {}): Promise<Instal
     return { agent, writtenFiles };
   }
 
+  if (agent === "hermes") {
+    throw new Error("Hermes installation is not implemented yet.");
+  }
+
   if (!options.mcpOnly) {
     const codexAgents = path.join(homeDir, ".codex", "AGENTS.md");
     await writeManagedBlock(codexAgents, bootstrapBlock(agent));
@@ -417,6 +489,10 @@ export async function uninstallAgent(options: UninstallOptions = {}): Promise<Un
     const claudeConfig = path.join(homeDir, ".claude.json");
     if (await removeClaudeMcpConfig(claudeConfig)) changedFiles.push(claudeConfig);
     return { agent, changedFiles };
+  }
+
+  if (agent === "hermes") {
+    throw new Error("Hermes uninstall is not implemented yet.");
   }
 
   const codexAgents = path.join(homeDir, ".codex", "AGENTS.md");
@@ -470,6 +546,10 @@ export async function readStatus(options: StatusOptions = {}): Promise<StatusRes
         projectProgress
       }
     };
+  }
+
+  if (agent === "hermes") {
+    throw new Error("Hermes status is not implemented yet.");
   }
 
   const codexAgents = path.join(homeDir, ".codex", "AGENTS.md");
@@ -594,15 +674,15 @@ export function parseArgs(argv: string[]): ParsedArgs {
       parsed.projectName = arg.slice("--project=".length);
     } else if (arg === "-g" || arg === "--agent") {
       const value = rest[index + 1];
-      if (value !== "claude" && value !== "codex") {
-        throw new Error(`${arg} requires claude or codex`);
+      if (value !== "claude" && value !== "codex" && value !== "hermes") {
+        throw new Error(`${arg} requires claude, codex, or hermes`);
       }
       parsed.agent = value;
       index += 1;
     } else if (arg.startsWith("--agent=")) {
       const value = arg.slice("--agent=".length);
-      if (value !== "claude" && value !== "codex") {
-        throw new Error("--agent requires claude or codex");
+      if (value !== "claude" && value !== "codex" && value !== "hermes") {
+        throw new Error("--agent requires claude, codex, or hermes");
       }
       parsed.agent = value;
     } else if (arg === "--roots") {

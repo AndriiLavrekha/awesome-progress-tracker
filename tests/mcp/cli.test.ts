@@ -3,6 +3,7 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
+  helpText,
   initProject,
   initProjectAndIndex,
   installAgent,
@@ -54,6 +55,9 @@ describe("npm CLI", () => {
     });
     expect(parseArgs(["install", "-g", "claude"]).agent).toBe("claude");
     expect(parseArgs(["install", "-g", "codex"]).agent).toBe("codex");
+    expect(parseArgs(["install", "-g", "hermes"]).agent).toBe("hermes");
+    expect(parseArgs(["install", "--agent=hermes"]).agent).toBe("hermes");
+    expect(helpText()).toContain("claude|codex|hermes");
     expect(parseArgs(["install", "-g", "codex", "--roots", "C:/one;C:/two"]).roots).toBe("C:/one;C:/two");
     expect(parseArgs(["install", "--verify"]).verify).toBe(true);
     expect(parseArgs(["doctor", "--json"])).toMatchObject({ command: "doctor", json: true });
@@ -70,7 +74,7 @@ describe("npm CLI", () => {
       stateCommand: "reset",
       targetDir: "C:/repo"
     });
-    expect(() => parseArgs(["install", "-g", "both"])).toThrow(/claude or codex/);
+    expect(() => parseArgs(["install", "-g", "both"])).toThrow(/claude, codex, or hermes/);
   });
 
   it("installs Claude bootstrap instructions and MCP config by default", async () => {
