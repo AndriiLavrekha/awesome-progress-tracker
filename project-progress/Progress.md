@@ -5,7 +5,7 @@ status: in_progress
 path: C:/Users/nkinc/Documents/progress-tracker
 agent_last_used: codex
 updated: 2026-08-12
-last_milestone: Hermes final-review fixes implemented and repository verification passed
+last_milestone: Hermes Skill + MCP packaged isolated-profile verification passed
 deployed: true
 deployment_url: https://github.com/AndriiLavrekha/awesome-progress-tracker/releases/tag/v0.2.3
 sensitivity: normal
@@ -42,7 +42,7 @@ The user described losing project state across many folders, coding agents, term
 
 ## Next Action
 
-Rebuild the package and repeat the end-to-end disposable `HERMES_HOME` smoke test, then complete final review and release preparation.
+Review and integrate `feat/hermes-skill-mcp`; prepare the next release. Native Hermes lifecycle hooks remain a separate follow-up.
 
 ## Remaining Work
 
@@ -74,8 +74,9 @@ Rebuild the package and repeat the end-to-end disposable `HERMES_HOME` smoke tes
 - [x] Write the Hermes Skill + MCP implementation plan.
 - [x] Implement Hermes CLI-backed install, status, doctor, and uninstall workflows with focused tests.
 - [x] Resolve final-review findings for PowerShell verification, Hermes-specific CLI copy, and profile-only MCP scope.
-- [ ] Re-run packaged integration verification against an isolated Hermes profile after the final-review fixes.
-- [ ] Complete final quality review and release preparation.
+- [x] Re-run packaged integration verification against an isolated Hermes profile after the final-review fixes.
+- [x] Complete final quality review.
+- [ ] Integrate the reviewed Hermes branch and decide release/versioning.
 
 ## Done
 
@@ -106,7 +107,7 @@ Rebuild the package and repeat the end-to-end disposable `HERMES_HOME` smoke tes
 
 ## Blockers
 
-None. Final-review Important findings are resolved. ADR 0015 still defines Hermes compatibility as Skill + MCP with lifecycle hooks deferred.
+None. ADR 0015 defines Hermes compatibility as Skill + MCP with lifecycle hooks deferred.
 
 ## Deployment
 
