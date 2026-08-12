@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { promises as fs } from "node:fs";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { execFile, spawn } from "node:child_process";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -38,6 +38,11 @@ const execFileAsync = promisify(execFile);
 const TEMPLATE_DIR = path.join(PACKAGE_ROOT, "templates", "project-progress");
 const MCP_SERVER_NAME = "awesome-progress-tracker";
 const PACKAGE_SPEC = "github:AndriiLavrekha/awesome-progress-tracker";
+const PACKAGE_VERSION = (
+  JSON.parse(readFileSync(path.join(PACKAGE_ROOT, "package.json"), "utf-8")) as { version: string }
+).version;
+const HERMES_SKILL_NAME = "project-progress";
+const HERMES_MCP_NAME = MCP_SERVER_NAME;
 
 export interface InitOptions {
   cwd?: string;
@@ -425,6 +430,33 @@ async function fileContains(filePath: string, value: string): Promise<boolean> {
   return (await fs.readFile(filePath, "utf-8")).includes(value);
 }
 
+function hermesSkillUrl(): string {
+  return `https://raw.githubusercontent.com/AndriiLavrekha/awesome-progress-tracker/v${PACKAGE_VERSION}/skills/project-progress/SKILL.md`;
+}
+
+function stripAnsi(value: string): string {
+  return value.replace(/\u001B\[[0-?]*[ -/]*[@-~]/g, "");
+}
+
+function parseHermesFirstColumnList(output: string): Set<string> {
+  const names = new Set<string>();
+  for (const line of stripAnsi(output).split(/\r?\n/)) {
+    const trimmed = line.trimStart();
+    if (!trimmed) continue;
+    const firstColumn = trimmed.match(/^(\S+)/)?.[1];
+    if (firstColumn) names.add(firstColumn);
+  }
+  return names;
+}
+
+function parseHermesSkillList(output: string): Set<string> {
+  return parseHermesFirstColumnList(output);
+}
+
+function parseHermesMcpList(output: string): Set<string> {
+  return parseHermesFirstColumnList(output);
+}
+
 export async function installAgent(options: InstallOptions = {}): Promise<InstallResult> {
   const agent = options.agent ?? "claude";
   const homeDir = options.homeDir ?? process.env.HOME ?? process.env.USERPROFILE;
@@ -450,6 +482,62 @@ export async function installAgent(options: InstallOptions = {}): Promise<Instal
     const claudeConfig = path.join(homeDir, ".claude.json");
     await installClaudeMcpConfig(claudeConfig, roots);
     writtenFiles.push(claudeConfig);
+    return { agent, writtenFiles };
+  }
+
+  if (agent === "hermes") {
+    const commandRunner = options.commandRunner ?? defaultCommandRunner;
+    const collisions: string[] = [];
+    let skillAlreadyInstalled = false;
+
+    if (!options.mcpOnly) {
+      const skillList = await commandRunner("hermes", ["skills", "list", "--source", "hub"]);
+      skillAlreadyInstalled = parseHermesSkillList(skillList.stdout).has(HERMES_SKILL_NAME);
+      if (skillAlreadyInstalled) collisions.push(`Hermes skill already exists: ${HERMES_SKILL_NAME}`);
+    }
+
+    const mcpList = await commandRunner("hermes", ["mcp", "list"]);
+    if (parseHermesMcpList(mcpList.stdout).has(HERMES_MCP_NAME)) {
+      collisions.push(`Hermes MCP server already exists: ${HERMES_MCP_NAME}`);
+    }
+
+    if (collisions.length > 0) {
+      throw new Error(collisions.join("\n"));
+    }
+
+    if (!options.mcpOnly) {
+      await commandRunner("hermes", ["skills", "install", hermesSkillUrl(), "--name", HERMES_SKILL_NAME, "--yes"]);
+      writtenFiles.push(`Hermes skill: ${HERMES_SKILL_NAME}`);
+    }
+
+    try {
+      await commandRunner("hermes", [
+        "mcp",
+        "add",
+        HERMES_MCP_NAME,
+        "--command",
+        "npx",
+        "--env",
+        `PROJECT_PROGRESS_ROOTS=${roots}`,
+        "--args",
+        "-y",
+        PACKAGE_SPEC,
+        "mcp"
+      ]);
+    } catch (error) {
+      if (!options.mcpOnly) {
+        try {
+          await commandRunner("hermes", ["skills", "uninstall", HERMES_SKILL_NAME], { stdin: "y\n" });
+        } catch (rollbackError) {
+          const message = error instanceof Error ? error.message : String(error);
+          const rollbackMessage = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
+          throw new Error(`${message}\nRollback failed: ${rollbackMessage}`);
+        }
+      }
+      throw error;
+    }
+
+    writtenFiles.push(`Hermes MCP server: ${HERMES_MCP_NAME}`);
     return { agent, writtenFiles };
   }
 

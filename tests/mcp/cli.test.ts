@@ -122,6 +122,199 @@ describe("npm CLI", () => {
     expect(configToml).toContain('PROJECT_PROGRESS_ROOTS = "C:/one;C:/two"');
   });
 
+  it("installs Hermes managed skill and MCP server with the command runner", async () => {
+    const calls: Array<{ command: string; args: string[]; stdin?: string }> = [];
+    const skillUrl =
+      "https://raw.githubusercontent.com/AndriiLavrekha/awesome-progress-tracker/v0.3.0/skills/project-progress/SKILL.md";
+    const runner = async (command: string, args: string[], options?: { stdin?: string }) => {
+      calls.push({ command, args, stdin: options?.stdin });
+      if (args[0] === "skills" && args[1] === "list") {
+        return { stdout: "NAME SOURCE\nother hub\n", stderr: "" };
+      }
+      if (args[0] === "mcp" && args[1] === "list") {
+        return { stdout: "NAME STATUS\nother enabled\n", stderr: "" };
+      }
+      return { stdout: "", stderr: "" };
+    };
+
+    const result = await installAgent({
+      agent: "hermes",
+      roots: "C:/one;C:/two",
+      commandRunner: runner
+    });
+
+    expect(result).toEqual({
+      agent: "hermes",
+      writtenFiles: ["Hermes skill: project-progress", "Hermes MCP server: awesome-progress-tracker"]
+    });
+    expect(calls).toEqual([
+      { command: "hermes", args: ["skills", "list", "--source", "hub"], stdin: undefined },
+      { command: "hermes", args: ["mcp", "list"], stdin: undefined },
+      {
+        command: "hermes",
+        args: ["skills", "install", skillUrl, "--name", "project-progress", "--yes"],
+        stdin: undefined
+      },
+      {
+        command: "hermes",
+        args: [
+          "mcp",
+          "add",
+          "awesome-progress-tracker",
+          "--command",
+          "npx",
+          "--env",
+          "PROJECT_PROGRESS_ROOTS=C:/one;C:/two",
+          "--args",
+          "-y",
+          "github:AndriiLavrekha/awesome-progress-tracker",
+          "mcp"
+        ],
+        stdin: undefined
+      }
+    ]);
+  });
+
+  it("installs only the Hermes MCP server in mcpOnly mode", async () => {
+    const calls: Array<{ command: string; args: string[]; stdin?: string }> = [];
+    const runner = async (command: string, args: string[], options?: { stdin?: string }) => {
+      calls.push({ command, args, stdin: options?.stdin });
+      if (args[0] === "mcp" && args[1] === "list") {
+        return { stdout: "NAME STATUS\nother enabled\n", stderr: "" };
+      }
+      if (args[0] === "mcp" && args[1] === "add") {
+        return { stdout: "", stderr: "" };
+      }
+      throw new Error(`unexpected command: ${command} ${args.join(" ")}`);
+    };
+
+    const result = await installAgent({
+      agent: "hermes",
+      roots: "C:/one;C:/two",
+      mcpOnly: true,
+      commandRunner: runner
+    });
+
+    expect(result).toEqual({
+      agent: "hermes",
+      writtenFiles: ["Hermes MCP server: awesome-progress-tracker"]
+    });
+    expect(calls).toEqual([
+      { command: "hermes", args: ["mcp", "list"], stdin: undefined },
+      {
+        command: "hermes",
+        args: [
+          "mcp",
+          "add",
+          "awesome-progress-tracker",
+          "--command",
+          "npx",
+          "--env",
+          "PROJECT_PROGRESS_ROOTS=C:/one;C:/two",
+          "--args",
+          "-y",
+          "github:AndriiLavrekha/awesome-progress-tracker",
+          "mcp"
+        ],
+        stdin: undefined
+      }
+    ]);
+  });
+
+  it("stops Hermes install before mutations when a managed name collides", async () => {
+    const calls: Array<{ command: string; args: string[]; stdin?: string }> = [];
+    const runner = async (command: string, args: string[], options?: { stdin?: string }) => {
+      calls.push({ command, args, stdin: options?.stdin });
+      if (args[0] === "skills" && args[1] === "list") {
+        return { stdout: "\u001b[32mproject-progress\u001b[0m hub\n", stderr: "" };
+      }
+      if (args[0] === "mcp" && args[1] === "list") {
+        return { stdout: "NAME STATUS\nawesome-progress-tracker enabled\n", stderr: "" };
+      }
+      throw new Error(`unexpected command: ${command} ${args.join(" ")}`);
+    };
+
+    await expect(
+      installAgent({
+        agent: "hermes",
+        roots: "C:/one;C:/two",
+        commandRunner: runner
+      })
+    ).rejects.toThrow(/project-progress|awesome-progress-tracker/);
+
+    expect(calls).toEqual([
+      { command: "hermes", args: ["skills", "list", "--source", "hub"], stdin: undefined },
+      { command: "hermes", args: ["mcp", "list"], stdin: undefined }
+    ]);
+  });
+
+  it("rolls back the Hermes skill when MCP add fails and reports rollback failure too", async () => {
+    const calls: Array<{ command: string; args: string[]; stdin?: string }> = [];
+    const runner = async (command: string, args: string[], options?: { stdin?: string }) => {
+      calls.push({ command, args, stdin: options?.stdin });
+      if (args[0] === "skills" && args[1] === "list") {
+        return { stdout: "NAME SOURCE\nother hub\n", stderr: "" };
+      }
+      if (args[0] === "mcp" && args[1] === "list") {
+        return { stdout: "NAME STATUS\nother enabled\n", stderr: "" };
+      }
+      if (args[0] === "mcp" && args[1] === "add") {
+        throw new Error("mcp add failed");
+      }
+      if (args[0] === "skills" && args[1] === "uninstall") {
+        throw new Error("skill rollback failed");
+      }
+      return { stdout: "", stderr: "" };
+    };
+
+    await expect(
+      installAgent({
+        agent: "hermes",
+        roots: "C:/one;C:/two",
+        commandRunner: runner
+      })
+    ).rejects.toThrow(/mcp add failed[\s\S]*skill rollback failed/);
+
+    expect(calls).toEqual([
+      { command: "hermes", args: ["skills", "list", "--source", "hub"], stdin: undefined },
+      { command: "hermes", args: ["mcp", "list"], stdin: undefined },
+      {
+        command: "hermes",
+        args: [
+          "skills",
+          "install",
+          "https://raw.githubusercontent.com/AndriiLavrekha/awesome-progress-tracker/v0.3.0/skills/project-progress/SKILL.md",
+          "--name",
+          "project-progress",
+          "--yes"
+        ],
+        stdin: undefined
+      },
+      {
+        command: "hermes",
+        args: [
+          "mcp",
+          "add",
+          "awesome-progress-tracker",
+          "--command",
+          "npx",
+          "--env",
+          "PROJECT_PROGRESS_ROOTS=C:/one;C:/two",
+          "--args",
+          "-y",
+          "github:AndriiLavrekha/awesome-progress-tracker",
+          "mcp"
+        ],
+        stdin: undefined
+      },
+      {
+        command: "hermes",
+        args: ["skills", "uninstall", "project-progress"],
+        stdin: "y\n"
+      }
+    ]);
+  });
+
   it("installs project-local MCP config without bootstrap instructions", async () => {
     const project = await fs.mkdtemp(path.join(os.tmpdir(), "project-progress-project-"));
 
