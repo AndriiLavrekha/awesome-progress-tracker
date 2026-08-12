@@ -40,7 +40,7 @@ The user described losing project state across many folders, coding agents, term
 
 ## Next Action
 
-Resolve the Hermes release-scope conflict: existing ADR 0002 permits Skill + MCP work only as a prerequisite and gates public support on a native lifecycle plugin; the newly approved design describes Skill + MCP as the first integration release.
+Choose the execution mode for `docs/superpowers/plans/2026-08-12-hermes-skill-mcp-integration.md`, then execute its test-first tasks and verify in an isolated Hermes profile.
 
 ## Remaining Work
 
@@ -68,6 +68,8 @@ Resolve the Hermes release-scope conflict: existing ADR 0002 permits Skill + MCP
 - [x] Add manual and agent-led test instructions.
 - [x] Commit and release the pre-edit reminder hook (`v0.2.3`).
 - [ ] Review and approve the Hermes Skill + MCP integration specification.
+- [x] Approve the Hermes Skill + MCP integration specification and supersede the lifecycle-plugin release gate.
+- [x] Write the Hermes Skill + MCP implementation plan.
 - [ ] Implement Hermes CLI-backed install, status, doctor, and uninstall workflows with focused tests.
 - [ ] Verify the packaged integration against an isolated Hermes profile.
 
@@ -97,7 +99,7 @@ Resolve the Hermes release-scope conflict: existing ADR 0002 permits Skill + MCP
 
 ## Blockers
 
-Release scope needs a user decision. Existing `docs/adr/0002-hermes-plugin-release-gate.md` says public Hermes compatibility is blocked on a native lifecycle plugin, while the current design proposes Skill + MCP as the first release slice.
+None. ADR 0015 supersedes the prior lifecycle-plugin release gate: supported Hermes compatibility begins with Skill + MCP; lifecycle hooks are deferred.
 
 ## Deployment
 

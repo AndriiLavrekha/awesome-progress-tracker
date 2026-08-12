@@ -2,7 +2,7 @@
 
 ## Goal
 
-Provide a supported first Hermes Agent integration that installs the existing
+Provide the supported first Hermes Agent integration that installs the existing
 `project-progress` skill and the existing `awesome-progress-tracker` stdio MCP
 server. It must leave Hermes profile-file management to the Hermes CLI and
 preserve `project-progress/Progress.md` as the canonical project state.
@@ -64,7 +64,8 @@ npx awesome-progress-tracker doctor -g hermes
 
 The installer delegates profile-safe changes to Hermes and informs the user to
 restart Hermes when needed. README and test documentation label this as
-"Skill + MCP integration" and explicitly say lifecycle hooks are deferred.
+supported "Skill + MCP integration" and explicitly say that automatic resume
+injection, stale-progress guarding, and commit protection are deferred.
 
 ## Testing and Verification
 
