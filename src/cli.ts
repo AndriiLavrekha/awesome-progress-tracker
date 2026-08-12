@@ -443,8 +443,13 @@ function parseHermesFirstColumnList(output: string): Set<string> {
   for (const line of stripAnsi(output).split(/\r?\n/)) {
     const trimmed = line.trimStart();
     if (!trimmed) continue;
-    const firstColumn = trimmed.match(/^(\S+)/)?.[1];
-    if (firstColumn) names.add(firstColumn);
+    if (/^[\u2500-\u257F\s]+$/u.test(trimmed)) continue;
+
+    const boxTableCells = [...trimmed.matchAll(/│([^│]*)/g)].map((match) => match[1].trim()).filter(Boolean);
+    const firstColumn = boxTableCells[0] ?? trimmed.match(/^(\S+)/)?.[1];
+    if (!firstColumn) continue;
+    if (firstColumn.toLowerCase() === "name") continue;
+    names.add(firstColumn);
   }
   return names;
 }
@@ -543,7 +548,12 @@ export async function installAgent(options: InstallOptions = {}): Promise<Instal
         "-y",
         PACKAGE_SPEC,
         "mcp"
-      ]);
+      ], { stdin: "y\n" });
+
+      const updatedMcpList = await runHermesCommand(commandRunner, ["mcp", "list"]);
+      if (!parseHermesMcpList(updatedMcpList.stdout).has(HERMES_MCP_NAME)) {
+        throw new Error(`Hermes MCP server was not present after add: ${HERMES_MCP_NAME}`);
+      }
     } catch (error) {
       if (!options.mcpOnly) {
         try {

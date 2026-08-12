@@ -126,13 +126,21 @@ describe("npm CLI", () => {
     const calls: Array<{ command: string; args: string[]; stdin?: string }> = [];
     const skillUrl =
       "https://raw.githubusercontent.com/AndriiLavrekha/awesome-progress-tracker/v0.3.0/skills/project-progress/SKILL.md";
+    let mcpListCount = 0;
     const runner = async (command: string, args: string[], options?: { stdin?: string }) => {
       calls.push({ command, args, stdin: options?.stdin });
       if (args[0] === "skills" && args[1] === "list") {
         return { stdout: "NAME SOURCE\nother hub\n", stderr: "" };
       }
       if (args[0] === "mcp" && args[1] === "list") {
-        return { stdout: "NAME STATUS\nother enabled\n", stderr: "" };
+        mcpListCount += 1;
+        return {
+          stdout:
+            mcpListCount === 1
+              ? "NAME STATUS\nother enabled\n"
+              : "NAME STATUS\nawesome-progress-tracker enabled\n",
+          stderr: ""
+        };
       }
       return { stdout: "", stderr: "" };
     };
@@ -170,17 +178,26 @@ describe("npm CLI", () => {
           "github:AndriiLavrekha/awesome-progress-tracker",
           "mcp"
         ],
-        stdin: undefined
-      }
+        stdin: "y\n"
+      },
+      { command: "hermes", args: ["mcp", "list"], stdin: undefined }
     ]);
   });
 
   it("installs only the Hermes MCP server in mcpOnly mode", async () => {
     const calls: Array<{ command: string; args: string[]; stdin?: string }> = [];
+    let mcpListCount = 0;
     const runner = async (command: string, args: string[], options?: { stdin?: string }) => {
       calls.push({ command, args, stdin: options?.stdin });
       if (args[0] === "mcp" && args[1] === "list") {
-        return { stdout: "NAME STATUS\nother enabled\n", stderr: "" };
+        mcpListCount += 1;
+        return {
+          stdout:
+            mcpListCount === 1
+              ? "NAME STATUS\nother enabled\n"
+              : "NAME STATUS\nawesome-progress-tracker enabled\n",
+          stderr: ""
+        };
       }
       if (args[0] === "mcp" && args[1] === "add") {
         return { stdout: "", stderr: "" };
@@ -216,8 +233,9 @@ describe("npm CLI", () => {
           "github:AndriiLavrekha/awesome-progress-tracker",
           "mcp"
         ],
-        stdin: undefined
-      }
+        stdin: "y\n"
+      },
+      { command: "hermes", args: ["mcp", "list"], stdin: undefined }
     ]);
   });
 
@@ -246,6 +264,74 @@ describe("npm CLI", () => {
       { command: "hermes", args: ["skills", "list", "--source", "hub"], stdin: undefined },
       { command: "hermes", args: ["mcp", "list"], stdin: undefined }
     ]);
+  });
+
+  it("parses Hermes box-table list output when reporting status and uninstalling", async () => {
+    const statusCalls: Array<{ command: string; args: string[]; stdin?: string }> = [];
+    const project = await fs.mkdtemp(path.join(os.tmpdir(), "project-progress-project-"));
+    await initProject({ cwd: project, projectName: "Hermes Project" });
+    const tableSkillList = [
+      "┌──────────────────┬────────┐",
+      "│ Name             │ Source │",
+      "├──────────────────┼────────┤",
+      "│ project-progress │ hub    │",
+      "└──────────────────┴────────┘"
+    ].join("\n");
+    const tableMcpList = [
+      "┌──────────────────────────┬─────────┐",
+      "│ Name                     │ Status  │",
+      "├──────────────────────────┼─────────┤",
+      "│ awesome-progress-tracker │ enabled │",
+      "└──────────────────────────┴─────────┘"
+    ].join("\n");
+    const statusRunner = async (command: string, args: string[], options?: { stdin?: string }) => {
+      statusCalls.push({ command, args, stdin: options?.stdin });
+      if (args[0] === "skills" && args[1] === "list") {
+        return { stdout: tableSkillList, stderr: "" };
+      }
+      if (args[0] === "mcp" && args[1] === "list") {
+        return { stdout: tableMcpList, stderr: "" };
+      }
+      throw new Error(`unexpected command: ${command} ${args.join(" ")}`);
+    };
+
+    await expect(readStatus({ agent: "hermes", cwd: project, commandRunner: statusRunner })).resolves.toMatchObject({
+      skillInstalled: true,
+      mcpConfigured: true
+    });
+
+    const uninstallCalls: Array<{ command: string; args: string[]; stdin?: string }> = [];
+    const uninstallRunner = async (command: string, args: string[], options?: { stdin?: string }) => {
+      uninstallCalls.push({ command, args, stdin: options?.stdin });
+      if (args[0] === "skills" && args[1] === "list") {
+        return { stdout: tableSkillList, stderr: "" };
+      }
+      if (args[0] === "mcp" && args[1] === "list") {
+        return { stdout: tableMcpList, stderr: "" };
+      }
+      if (args[0] === "mcp" && args[1] === "remove") {
+        return { stdout: "", stderr: "" };
+      }
+      if (args[0] === "skills" && args[1] === "uninstall") {
+        return { stdout: "", stderr: "" };
+      }
+      throw new Error(`unexpected command: ${command} ${args.join(" ")}`);
+    };
+
+    await expect(uninstallAgent({ agent: "hermes", commandRunner: uninstallRunner })).resolves.toEqual({
+      agent: "hermes",
+      changedFiles: ["Hermes MCP server: awesome-progress-tracker", "Hermes skill: project-progress"]
+    });
+    expect(uninstallCalls).toContainEqual({
+      command: "hermes",
+      args: ["mcp", "remove", "awesome-progress-tracker"],
+      stdin: "y\n"
+    });
+    expect(uninstallCalls).toContainEqual({
+      command: "hermes",
+      args: ["skills", "uninstall", "project-progress"],
+      stdin: "y\n"
+    });
   });
 
   it("rolls back the Hermes skill when MCP add fails and reports rollback failure too", async () => {
@@ -305,8 +391,79 @@ describe("npm CLI", () => {
           "github:AndriiLavrekha/awesome-progress-tracker",
           "mcp"
         ],
+        stdin: "y\n"
+      },
+      {
+        command: "hermes",
+        args: ["skills", "uninstall", "project-progress"],
+        stdin: "y\n"
+      }
+    ]);
+  });
+
+  it("rolls back the Hermes skill when mcp add exits without persisting the server", async () => {
+    const calls: Array<{ command: string; args: string[]; stdin?: string }> = [];
+    let mcpListCount = 0;
+    const runner = async (command: string, args: string[], options?: { stdin?: string }) => {
+      calls.push({ command, args, stdin: options?.stdin });
+      if (args[0] === "skills" && args[1] === "list") {
+        return { stdout: "NAME SOURCE\nother hub\n", stderr: "" };
+      }
+      if (args[0] === "mcp" && args[1] === "list") {
+        mcpListCount += 1;
+        return { stdout: "NAME STATUS\nother enabled\n", stderr: "" };
+      }
+      if (args[0] === "mcp" && args[1] === "add") {
+        return { stdout: "Cancelled.\n", stderr: "" };
+      }
+      if (args[0] === "skills" && args[1] === "uninstall") {
+        return { stdout: "", stderr: "" };
+      }
+      return { stdout: "", stderr: "" };
+    };
+
+    await expect(
+      installAgent({
+        agent: "hermes",
+        roots: "C:/one;C:/two",
+        commandRunner: runner
+      })
+    ).rejects.toThrow(/Hermes MCP server was not present after add/i);
+
+    expect(mcpListCount).toBe(2);
+    expect(calls).toEqual([
+      { command: "hermes", args: ["skills", "list", "--source", "hub"], stdin: undefined },
+      { command: "hermes", args: ["mcp", "list"], stdin: undefined },
+      {
+        command: "hermes",
+        args: [
+          "skills",
+          "install",
+          "https://raw.githubusercontent.com/AndriiLavrekha/awesome-progress-tracker/v0.3.0/skills/project-progress/SKILL.md",
+          "--name",
+          "project-progress",
+          "--yes"
+        ],
         stdin: undefined
       },
+      {
+        command: "hermes",
+        args: [
+          "mcp",
+          "add",
+          "awesome-progress-tracker",
+          "--command",
+          "npx",
+          "--env",
+          "PROJECT_PROGRESS_ROOTS=C:/one;C:/two",
+          "--args",
+          "-y",
+          "github:AndriiLavrekha/awesome-progress-tracker",
+          "mcp"
+        ],
+        stdin: "y\n"
+      },
+      { command: "hermes", args: ["mcp", "list"], stdin: undefined },
       {
         command: "hermes",
         args: ["skills", "uninstall", "project-progress"],
