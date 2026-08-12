@@ -33,6 +33,12 @@
 - [x] Project-local MCP config can be generated with `--scope project`.
 - [x] Manual test plan covers new, existing, initialized, uninitialized, hook, MCP, index, privacy, and uninstall scenarios.
 - [x] Agent self-test instructions exist.
+- [ ] Hermes docs match the supported surface: skill + MCP only; lifecycle hooks are deferred.
+- [ ] Disposable Hermes verification uses a temporary `HERMES_HOME`.
+- [ ] `install -g hermes`, `doctor -g hermes`, and `uninstall -g hermes` work against the packaged tarball.
+- [ ] `hermes skills list --source hub`, `hermes mcp list`, and `hermes mcp test awesome-progress-tracker` pass.
+- [ ] Hermes agent tool discovery/read/update smoke tests pass.
+- [ ] Hermes opt-out and uninstall paths are verified.
 
 ## Claude Code plugin
 

@@ -11,6 +11,47 @@ function assertContainsAll(text: string, phrases: string[]): void {
 }
 
 describe("instruction pack", () => {
+  it("documents Hermes support as skill plus MCP with hooks deferred", async () => {
+    const text = await read("README.md");
+    assertContainsAll(text, [
+      "Hermes Agent",
+      "npm install -g hermes",
+      "hermes install -g github:AndriiLavrekha/awesome-progress-tracker",
+      "`install`, `doctor`, and `uninstall` commands",
+      "Named collisions stop the install before any changes are made.",
+      "restart Hermes after install or update",
+      "lifecycle hooks are deferred for Hermes"
+    ]);
+  });
+
+  it("documents disposable Hermes verification without changing a real profile", async () => {
+    const text = await read("TESTING.md");
+    assertContainsAll(text, [
+      "HERMES_HOME",
+      "npm pack",
+      "hermes skills list --source hub",
+      "hermes mcp list",
+      "hermes mcp test awesome-progress-tracker",
+      "list projects",
+      "read project progress",
+      "update the Next Action",
+      "state set /path/to/repo --state opted-out",
+      "uninstall -g hermes"
+    ]);
+  });
+
+  it("adds Hermes release gates for the documented support boundary", async () => {
+    const text = await read("RELEASE_CHECKLIST.md");
+    assertContainsAll(text, [
+      "Hermes docs match the supported surface: skill + MCP only; lifecycle hooks are deferred.",
+      "Disposable Hermes verification uses a temporary `HERMES_HOME`.",
+      "`install -g hermes`, `doctor -g hermes`, and `uninstall -g hermes` work against the packaged tarball.",
+      "`hermes skills list --source hub`, `hermes mcp list`, and `hermes mcp test awesome-progress-tracker` pass.",
+      "Hermes agent tool discovery/read/update smoke tests pass.",
+      "Hermes opt-out and uninstall paths are verified."
+    ]);
+  });
+
   it("declares the expected Codex skill frontmatter", async () => {
     const text = await read("skills/project-progress/SKILL.md");
     expect(text).toContain("name: project-progress");

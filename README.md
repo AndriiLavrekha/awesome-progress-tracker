@@ -158,6 +158,54 @@ it does not dirty the project.
 Skills follow the cross-tool open standard (`SKILL.md`), so the same skill also works in Codex,
 Gemini CLI, Copilot, and Cursor when placed under `~/.agents/skills` or a repo's `.agents/skills`.
 
+## Install For Hermes Agent
+
+Hermes Agent is supported today through the managed skill + MCP path. The current Hermes integration
+supports the `install`, `doctor`, and `uninstall` commands, plus `status` for inspection.
+lifecycle hooks are deferred for Hermes, so this path does not yet wire `SessionStart`,
+`PreToolUse`, or `Stop` automation.
+
+If Hermes itself is not installed yet:
+
+```bash
+npm install -g hermes
+```
+
+If you prefer to keep this package available to Hermes globally, you can also install the package
+with:
+
+```bash
+hermes install -g github:AndriiLavrekha/awesome-progress-tracker
+```
+
+To wire the supported managed integration, run:
+
+```bash
+npx github:AndriiLavrekha/awesome-progress-tracker install -g hermes
+```
+
+What this Hermes path manages today:
+
+| Piece | What it does |
+| --- | --- |
+| **Skill** `project-progress` | Installs the shared `SKILL.md` into Hermes from the tagged raw GitHub URL |
+| **MCP server** `awesome-progress-tracker` | Adds the stdio MCP server through `hermes mcp add ...` with `PROJECT_PROGRESS_ROOTS` |
+| **Doctor** | Verifies Hermes CLI availability, skill presence, MCP presence, and `hermes mcp test awesome-progress-tracker` connectivity |
+| **Uninstall** | Removes only the managed Hermes skill and MCP server |
+
+Named collisions stop the install before any changes are made. If Hermes already has a
+`project-progress` skill or `awesome-progress-tracker` MCP server, remove or rename the existing
+entry first and rerun the installer.
+
+After install or update, restart Hermes after install or update so it reloads the managed skill and
+MCP registry.
+
+Because lifecycle hooks are deferred for Hermes, use the skill and MCP tools directly for now:
+
+- initialize with `awesome-progress-tracker init . --project "<name>"` when the user opts in
+- inspect setup with `awesome-progress-tracker status -g hermes` or `awesome-progress-tracker doctor -g hermes`
+- use `hermes skills list --source hub`, `hermes mcp list`, and `hermes mcp test awesome-progress-tracker` for manual verification
+
 ## Initialize A Project
 
 After npm publication:

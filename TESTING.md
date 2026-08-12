@@ -260,6 +260,60 @@ Expected:
 - Codex skill is removed for Codex uninstall.
 - Project-local `project-progress/` folders are not deleted.
 
+## Scenario 9: Hermes Disposable Profile Verification
+
+Use a temporary `HERMES_HOME` so the test never changes your real Hermes profile.
+
+1. Build and package the repo:
+
+```bash
+npm pack
+```
+
+2. In a disposable shell, point Hermes at an isolated home and install the packaged CLI:
+
+```bash
+export HERMES_HOME="$(mktemp -d)"
+npx --yes ./awesome-progress-tracker-0.3.0.tgz install -g hermes --roots "C:/path/to/projects"
+```
+
+3. Verify the managed registrations:
+
+```bash
+hermes skills list --source hub
+hermes mcp list
+hermes mcp test awesome-progress-tracker
+npx --yes ./awesome-progress-tracker-0.3.0.tgz doctor -g hermes
+```
+
+4. Start Hermes against a temporary initialized project and smoke the agent-facing tool flow:
+
+- list projects
+- read project progress
+- update the Next Action
+
+5. Verify the opt-out path on an uninitialized disposable repo:
+
+```bash
+npx --yes ./awesome-progress-tracker-0.3.0.tgz state set /path/to/repo --state opted-out
+```
+
+6. Remove the managed Hermes entries:
+
+```bash
+npx --yes ./awesome-progress-tracker-0.3.0.tgz uninstall -g hermes
+```
+
+Expected:
+
+- The temporary `HERMES_HOME` contains the managed Hermes state; the real profile stays unchanged.
+- `hermes skills list --source hub` shows `project-progress`.
+- `hermes mcp list` shows `awesome-progress-tracker`.
+- `hermes mcp test awesome-progress-tracker` passes.
+- The Hermes agent can list projects, read project progress, and update the Next Action through the MCP tools.
+- Opt-out suppresses future initialization prompts for that disposable repo.
+- `uninstall -g hermes` removes the managed skill and MCP server cleanly.
+
 ## Report Format
 
 For each scenario, record:
