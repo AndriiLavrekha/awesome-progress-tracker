@@ -5,7 +5,7 @@ status: in_progress
 path: C:/Users/nkinc/Documents/progress-tracker
 agent_last_used: codex
 updated: 2026-08-14
-last_milestone: Hermes Skill + MCP packaged isolated-profile verification passed
+last_milestone: Hermes Skill + MCP integrated into main after packaged verification
 deployed: true
 deployment_url: https://github.com/AndriiLavrekha/awesome-progress-tracker/releases/tag/v0.2.3
 sensitivity: normal
@@ -22,7 +22,7 @@ On top of that, added a `PreToolUse` hook on `Edit`/`Write` (`handlePreEdit` in 
 
 The Hermes Skill + MCP implementation is now complete in the isolated worktree. Final-review fixes add an explicit tested PowerShell disposable-profile recipe, Hermes-specific CLI success/uninstall guidance, and hard rejection of unsupported Hermes project-local MCP install/uninstall semantics. Fresh verification passed: 39 focused tests, all 116 repository tests, and typecheck.
 
-Integration review is complete on `feat/hermes-skill-mcp`. Fresh verification passed on the branch: 39 focused tests, all 116 repository tests, typecheck, build, package dry-run, and a real packaged `.tgz` smoke in a disposable `HERMES_HOME`. Hermes install, status, doctor, MCP connection/tool discovery (5 tools), uninstall, and project-progress preservation all passed. The branch is a direct descendant of `main` and is ready for an explicit integration/release choice.
+Integration review completed on `feat/hermes-skill-mcp`, then the branch was fast-forwarded into `main`. Fresh verification passed on the branch before merge: 39 focused tests, all 116 repository tests, typecheck, build, package dry-run, and a real packaged `.tgz` smoke in a disposable `HERMES_HOME`. Hermes install, status, doctor, MCP connection/tool discovery (5 tools), uninstall, and project-progress preservation all passed.
 
 ## Current State
 
@@ -44,7 +44,7 @@ The user described losing project state across many folders, coding agents, term
 
 ## Next Action
 
-Integrate or retain `feat/hermes-skill-mcp` by explicit user choice, then decide release/versioning. Native Hermes lifecycle hooks remain a separate follow-up.
+Prepare the Hermes release/versioning decision and publish when approved. Native Hermes lifecycle hooks remain a separate follow-up.
 
 ## Remaining Work
 
@@ -78,7 +78,8 @@ Integrate or retain `feat/hermes-skill-mcp` by explicit user choice, then decide
 - [x] Resolve final-review findings for PowerShell verification, Hermes-specific CLI copy, and profile-only MCP scope.
 - [x] Re-run packaged integration verification against an isolated Hermes profile after the final-review fixes.
 - [x] Complete final quality review.
-- [ ] Integrate the reviewed Hermes branch and decide release/versioning.
+- [x] Integrate the reviewed Hermes branch into `main`.
+- [ ] Decide Hermes release/versioning and publish the next release.
 
 ## Done
 
