@@ -4,7 +4,7 @@ progress_schema_version: 1
 status: in_progress
 path: C:/Users/nkinc/Documents/progress-tracker
 agent_last_used: codex
-updated: 2026-08-12
+updated: 2026-08-14
 last_milestone: Hermes Skill + MCP packaged isolated-profile verification passed
 deployed: true
 deployment_url: https://github.com/AndriiLavrekha/awesome-progress-tracker/releases/tag/v0.2.3
@@ -21,6 +21,8 @@ The Codex MCP cold-start fix is released as `v0.2.2`. The Codex plugin now start
 On top of that, added a `PreToolUse` hook on `Edit`/`Write` (`handlePreEdit` in `src/hook/cc-adapter.ts`, subcommand `pre-edit`) that reminds the agent once per session to check `Tasks.md`/`Open Questions.md` before changing project files, closing the gap where casual "add a feature"/"do a pass" requests skipped the `project-progress` skill entirely. TDD'd with 4 new tests; wired into `hooks/hooks.json` and `hooks/hooks-codex.json`; manifest tests and SKILL.md updated. Full suite: 97 tests passed, typecheck clean, build clean. Published as `v0.2.3`.
 
 The Hermes Skill + MCP implementation is now complete in the isolated worktree. Final-review fixes add an explicit tested PowerShell disposable-profile recipe, Hermes-specific CLI success/uninstall guidance, and hard rejection of unsupported Hermes project-local MCP install/uninstall semantics. Fresh verification passed: 39 focused tests, all 116 repository tests, and typecheck.
+
+Integration review is complete on `feat/hermes-skill-mcp`. Fresh verification passed on the branch: 39 focused tests, all 116 repository tests, typecheck, build, package dry-run, and a real packaged `.tgz` smoke in a disposable `HERMES_HOME`. Hermes install, status, doctor, MCP connection/tool discovery (5 tools), uninstall, and project-progress preservation all passed. The branch is a direct descendant of `main` and is ready for an explicit integration/release choice.
 
 ## Current State
 
@@ -42,7 +44,7 @@ The user described losing project state across many folders, coding agents, term
 
 ## Next Action
 
-Review and integrate `feat/hermes-skill-mcp`; prepare the next release. Native Hermes lifecycle hooks remain a separate follow-up.
+Integrate or retain `feat/hermes-skill-mcp` by explicit user choice, then decide release/versioning. Native Hermes lifecycle hooks remain a separate follow-up.
 
 ## Remaining Work
 
