@@ -25,6 +25,21 @@ describe("plugin manifests", () => {
     expect(plugin.description.length).toBeGreaterThan(20);
   });
 
+  it("keeps plugin, marketplace, and npm package versions in sync", async () => {
+    const pkg = await readJson("package.json");
+    const plugin = await readJson(".claude-plugin/plugin.json");
+    const market = await readJson(".claude-plugin/marketplace.json");
+    const codexPlugin = await readJson(".codex-plugin/plugin.json");
+
+    // `claude plugin update` / `codex plugin update` read their own
+    // plugin.json's version to decide whether an update is available; if
+    // this drifts from package.json, the CLI reports "already at the latest
+    // version" even after a real release ships.
+    expect(plugin.version).toBe(pkg.version);
+    expect(market.metadata.version).toBe(pkg.version);
+    expect(codexPlugin.version).toBe(pkg.version);
+  });
+
   it("exposes the plugin through a self-sourced marketplace", async () => {
     const market = await readJson(".claude-plugin/marketplace.json");
     const plugin = await readJson(".claude-plugin/plugin.json");

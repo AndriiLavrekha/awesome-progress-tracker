@@ -1,6 +1,6 @@
 {
   "name": "project-progress",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Project-local Markdown progress tracking for resumable, multi-step agent work. Bundles the project-progress skill, an MCP server for a cross-project index, and lifecycle hooks that inject resume context on session start and guard sensitive progress on commit.",
   "author": {
     "name": "Andrii Lavrekha",
