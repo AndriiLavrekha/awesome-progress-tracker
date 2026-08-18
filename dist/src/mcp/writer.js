@@ -2,6 +2,8 @@ const SECTION_RE = /^##(?!#)\s+(?<title>.+?)\s*$/;
 const FENCE_RE = /^\s*(?<fence>`{3,}|~{3,})(?<rest>.*)$/;
 export const MAX_LAST_MILESTONE_LENGTH = 240;
 export const MAX_SECTION_CONTENT_LENGTH = 4000;
+export const FOLD_THRESHOLD = 2800;
+const ARCHIVE_HEADING = "## Archived Done Items";
 export const ALLOWED_PROGRESS_SECTIONS = [
     "Resume Snapshot",
     "Current State",
@@ -106,6 +108,33 @@ export function replaceSection(markdown, title, content) {
 export function replaceSectionWithOperation(markdown, title, content) {
     const operation = sectionMatches(markdown).some((match) => match.title === title) ? "replaced" : "created";
     return { markdown: replaceSection(markdown, title, content), operation };
+}
+export function foldDoneSection(content) {
+    if (content.length <= FOLD_THRESHOLD)
+        return { kept: content, archived: [] };
+    const lines = content.split("\n");
+    const keptLines = [];
+    let length = 0;
+    for (let index = lines.length - 1; index >= 0; index -= 1) {
+        const line = lines[index];
+        const addedLength = keptLines.length === 0 ? line.length : line.length + 1;
+        if (length + addedLength > FOLD_THRESHOLD && keptLines.length > 0)
+            break;
+        keptLines.unshift(line);
+        length += addedLength;
+    }
+    const archived = lines.slice(0, lines.length - keptLines.length);
+    return { kept: keptLines.join("\n"), archived };
+}
+export function appendToArchive(archiveMarkdown, items) {
+    if (items.length === 0)
+        return archiveMarkdown;
+    const dateHeading = `### ${new Date().toISOString().slice(0, 10)}`;
+    const entry = `${dateHeading}\n\n${items.join("\n")}\n`;
+    if (archiveMarkdown.includes(ARCHIVE_HEADING)) {
+        return `${archiveMarkdown.trimEnd()}\n\n${entry}`;
+    }
+    return `${archiveMarkdown.trimEnd()}\n\n${ARCHIVE_HEADING}\n\n${entry}`;
 }
 export async function writeFileAtomic(filePath, content, expectedMtimeMs) {
     const current = await fs.stat(filePath);

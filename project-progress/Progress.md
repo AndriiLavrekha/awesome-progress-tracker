@@ -4,8 +4,8 @@ progress_schema_version: 1
 status: in_progress
 path: C:/Users/nkinc/Documents/progress-tracker
 agent_last_used: codex
-updated: 2026-08-14
-last_milestone: Hermes Skill + MCP integrated into main after packaged verification
+updated: 2026-08-18
+last_milestone: Fold/archive (ADR 0016) and fail-closed Stop gate (ADR 0017) implemented, unreleased
 deployed: true
 deployment_url: https://github.com/AndriiLavrekha/awesome-progress-tracker/releases/tag/v0.2.3
 sensitivity: normal
@@ -16,13 +16,12 @@ commit_progress: true
 
 ## Resume Snapshot
 
-The Codex MCP cold-start fix is released as `v0.2.2`. The Codex plugin now starts its already-installed MCP artifact with `node dist/src/mcp/server.js` and `cwd: "."`, avoiding GitHub-source npx installation during MCP initialization. Release verification passed: focused and full tests, typecheck, build, package dry-run, and a JSON-RPC initialize response in 0.360 seconds.
+Fixed two token/context-loss gaps in the tracker itself (dogfooded on this repo's own `project-progress/`), both unreleased on `main` (not yet tagged).
 
-On top of that, added a `PreToolUse` hook on `Edit`/`Write` (`handlePreEdit` in `src/hook/cc-adapter.ts`, subcommand `pre-edit`) that reminds the agent once per session to check `Tasks.md`/`Open Questions.md` before changing project files, closing the gap where casual "add a feature"/"do a pass" requests skipped the `project-progress` skill entirely. TDD'd with 4 new tests; wired into `hooks/hooks.json` and `hooks/hooks-codex.json`; manifest tests and SKILL.md updated. Full suite: 97 tests passed, typecheck clean, build clean. Published as `v0.2.3`.
+1. **Progress.md unbounded growth (ADR 0016).** `update_project_progress`'s `Done` section now auto-folds: when submitted content exceeds `FOLD_THRESHOLD` (2800 chars), the oldest lines move into a new `Archive.md` (new template file, auto-copied by `init`) and only the newest lines stay in `Progress.md`. `foldDoneSection`/`appendToArchive` added to `src/mcp/writer.ts`, wired into `update_project_progress` in `src/mcp/server.ts` (response now reports `archived: N`). SKILL.md now states `Resume Snapshot`/`Last Session` are replace-wholesale fields, not append targets — old narrative belongs in dated `Session Log.md` entries.
+2. **Stop hook never enforced staleness (ADR 0017).** `handleStop` previously always returned `code: 0` (advisory-only), so a session could do real work and end without ever updating `Progress.md`. `handleStop` now reuses `checkFreshness` and, on Claude Code, hard-blocks the first stale Stop via `code: 2` + stderr (Claude Code's documented Stop-block mechanism), capped to once per session via a new `stopBlocked` session-state flag so it can't loop forever. Codex is kept on a new `stop-soft` subcommand (`{ allowBlock: false }`, same soft `systemMessage` as before) until Codex's exit-code-2 semantics for its Stop-equivalent hook are manually verified — same gate pattern as ADR 0002/0015.
 
-The Hermes Skill + MCP implementation is now complete in the isolated worktree. Final-review fixes add an explicit tested PowerShell disposable-profile recipe, Hermes-specific CLI success/uninstall guidance, and hard rejection of unsupported Hermes project-local MCP install/uninstall semantics. Fresh verification passed: 39 focused tests, all 116 repository tests, and typecheck.
-
-Integration review completed on `feat/hermes-skill-mcp`, then the branch was fast-forwarded into `main`. Fresh verification passed on the branch before merge: 39 focused tests, all 116 repository tests, typecheck, build, package dry-run, and a real packaged `.tgz` smoke in a disposable `HERMES_HOME`. Hermes install, status, doctor, MCP connection/tool discovery (5 tools), uninstall, and project-progress preservation all passed.
+Verification: full suite 123/123 passing, typecheck clean, build clean. Manual smoke: real `init` creates `Archive.md`; a scripted fold run moved 20/200 synthetic Done items into `Archive.md` correctly.
 
 ## Current State
 
@@ -40,11 +39,11 @@ The approved direction is skill-first and project-local:
 
 ## Last Session
 
-The user described losing project state across many folders, coding agents, terminal sessions, reboots, and token limits. The design evolved from a CLI/MCP idea into a leaner project-local Markdown system maintained by agent skills and instructions. The user then clarified lifecycle hooks, token-conscious behavior, and seven final operational defaults. An implementation plan was written with phases for templates, validation, hooks, agent instructions, MCP, and release verification.
+The user asked whether unbounded `Progress.md` growth was a real problem and for mitigation options; picked "replace-don't-append + auto-fold" (ADR 0016), which was planned and implemented. While testing it, the user hit the Stop hook's stale-progress warning and asked whether it was a bug; it wasn't — it's an advisory-only message with no enforcement. The user asked to fix that gap by making it fail-closed (ADR 0017), which was researched (confirmed Claude Code's exit-2 Stop-block contract, found Codex's undocumented) and implemented with a Codex-safe soft fallback.
 
 ## Next Action
 
-Prepare the Hermes release/versioning decision and publish when approved. Native Hermes lifecycle hooks remain a separate follow-up.
+Commit and release the Progress.md fold/archive fix (ADR 0016) and the fail-closed Stop gate (ADR 0017). Manually verify Codex's exit-code-2 Stop-hook behavior so `hooks-codex.json` can move off `stop-soft` onto the hard-blocking `stop` subcommand. Separately, prepare the Hermes release/versioning decision and publish when approved; native Hermes lifecycle hooks remain a separate follow-up.
 
 ## Remaining Work
 
@@ -80,6 +79,8 @@ Prepare the Hermes release/versioning decision and publish when approved. Native
 - [x] Complete final quality review.
 - [x] Integrate the reviewed Hermes branch into `main`.
 - [ ] Decide Hermes release/versioning and publish the next release.
+- [ ] Manually verify Codex Stop-hook exit-code-2 behavior, then promote `hooks-codex.json` from `stop-soft` to `stop`.
+- [ ] Commit and release ADR 0016 (fold/archive) and ADR 0017 (fail-closed Stop gate).
 
 ## Done
 
@@ -107,6 +108,9 @@ Prepare the Hermes release/versioning decision and publish when approved. Native
 - [x] Added Hermes CLI-backed Skill + MCP install, status, doctor, and uninstall support.
 - [x] Added tested POSIX and PowerShell disposable Hermes verification recipes.
 - [x] Added Hermes-specific CLI output and rejected unsupported project-local Hermes MCP semantics.
+- [x] Added `Done`-section auto-fold to `Archive.md` in `update_project_progress`, capped at `FOLD_THRESHOLD` (ADR 0016).
+- [x] Clarified in SKILL.md that `Resume Snapshot`/`Last Session` are replace-wholesale fields, not append targets.
+- [x] Made the Stop hook fail-closed on Claude Code (exit 2, once per session via `stopBlocked`), kept Codex on soft-only `stop-soft` until verified (ADR 0017).
 
 ## Blockers
 

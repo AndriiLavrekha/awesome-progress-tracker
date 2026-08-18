@@ -36,7 +36,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${PLUGIN_ROOT}/dist/src/hook/cc-adapter.js\" stop"
+            "command": "node \"${PLUGIN_ROOT}/dist/src/hook/cc-adapter.js\" stop-soft"
           }
         ]
       }

@@ -75,13 +75,15 @@ If `sensitivity: sensitive` or `commit_progress: false`, update local progress f
 
 ## What To Update
 
-- `Progress.md`: current state, `Resume Snapshot`, next action, blockers, deployment state, and `Completion Criteria` status.
+- `Progress.md`: current state, `Resume Snapshot`, next action, blockers, deployment state, and `Completion Criteria` status. `Resume Snapshot` and `Last Session` are replaced wholesale on every update — never prepend or append prior text onto them. If old narrative is worth keeping, put it in a dated `Session Log.md` entry instead of accumulating it in these two fields.
 - `Tasks.md`: active, remaining, and completed tasks.
 - `Decisions.md`: durable decisions with a short reason.
 - `Open Questions.md`: unresolved questions that need user input, research, access, credentials, or a later decision.
 - `Session Log.md`: dated summary of what changed, what was verified, and where to resume.
 
 Keep entries compact. Prefer links to files over pasted logs or long code blocks.
+
+When `Done` grows large, the `update_project_progress` MCP tool automatically folds the oldest completed items out of `Progress.md` into `Archive.md`, keeping the most recent items in place. `Archive.md` is not part of the default token-conscious read order; read it only when explicitly asked about older completed work.
 
 ## Completion Rules
 

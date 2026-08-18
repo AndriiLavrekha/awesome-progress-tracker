@@ -258,23 +258,53 @@ describe("cc-adapter stop reminder", () => {
     expect(result.stdout).toBeUndefined();
   });
 
-  it("warns about stale progress when the tree changed this session", async () => {
+  it("blocks the first stop on stale progress when the tree changed this session", async () => {
     const dir = await makeRepo();
     await writeProgress(dir, progressDoc({}));
     await fs.writeFile(path.join(dir, "app.txt"), "new work", "utf-8");
 
     const result = await handleStop({ cwd: dir, session_id: `no-state-${Date.now()}` });
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain("[project-progress]");
+    expect(result.stderr).toContain("not updated");
+    expect(result.stdout).toBeUndefined();
+  });
+
+  it("falls back to a soft warning once the hard block already fired this session", async () => {
+    const dir = await makeRepo();
+    await writeProgress(dir, progressDoc({}));
+    await fs.writeFile(path.join(dir, "app.txt"), "new work", "utf-8");
+    const sessionId = `stop-twice-${Date.now()}`;
+
+    const first = await handleStop({ cwd: dir, session_id: sessionId });
+    expect(first.code).toBe(2);
+
+    const second = await handleStop({ cwd: dir, session_id: sessionId });
+    expect(second.code).toBe(0);
+    expect(second.stdout).toContain("[project-progress]");
+    expect(second.stdout).toContain("not updated");
+    expect(second.stderr).toBeUndefined();
+  });
+
+  it("only soft-warns, never hard-blocks, when hard blocking is disabled", async () => {
+    const dir = await makeRepo();
+    await writeProgress(dir, progressDoc({}));
+    await fs.writeFile(path.join(dir, "app.txt"), "new work", "utf-8");
+
+    const result = await handleStop({ cwd: dir, session_id: `no-state-${Date.now()}` }, { allowBlock: false });
     expect(result.code).toBe(0);
     expect(result.stdout).toContain("[project-progress]");
     expect(result.stdout).toContain("not updated");
+    expect(result.stderr).toBeUndefined();
   });
 
-  it("warns about secret-like values in the progress file", async () => {
+  it("includes secret-like value warnings in the block message", async () => {
     const dir = await makeRepo();
     await writeProgress(dir, progressDoc({}).replace("Wire the widget.", "token sk-abcdefghijklmnop0123456789"));
     await fs.writeFile(path.join(dir, "app.txt"), "new work", "utf-8");
 
     const result = await handleStop({ cwd: dir, session_id: `no-state-${Date.now()}` });
-    expect(result.stdout).toContain("secrets");
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain("secrets");
   });
 });

@@ -6,10 +6,13 @@ import * as z from "zod/v4";
 import { DEFAULT_DISCOVERY_EXCLUDES, discoverProjects } from "./discovery.js";
 import { readProjectIndex, refreshProjectIndex, upsertIndexedProject } from "./index.js";
 import { parseProjectSummary } from "./markdown.js";
+import path from "node:path";
 import {
   ALLOWED_PROGRESS_SECTIONS,
   MAX_LAST_MILESTONE_LENGTH,
   MAX_SECTION_CONTENT_LENGTH,
+  appendToArchive,
+  foldDoneSection,
   replaceFrontmatterValue,
   replaceSection,
   replaceSectionWithOperation,
@@ -304,12 +307,27 @@ export function createServer(): McpServer {
 
       const fileState = await fs.stat(match.progressPath);
       const markdown = await fs.readFile(match.progressPath, "utf-8");
-      const result = replaceSectionWithOperation(markdown, section, content);
+
+      let sectionContent = content;
+      let archived: string[] = [];
+      if (section === "Done") {
+        const fold = foldDoneSection(content);
+        sectionContent = fold.kept;
+        archived = fold.archived;
+      }
+
+      const result = replaceSectionWithOperation(markdown, section, sectionContent);
       const updated = result.markdown;
       await writeFileAtomic(match.progressPath, updated, fileState.mtimeMs);
       await upsertIndexedProject(parseProjectSummary(updated, match.progressPath));
 
-      return textResult(JSON.stringify({ updated: true, operation: result.operation, project, section, updatedAt: new Date().toISOString(), progressPath: match.progressPath }));
+      if (archived.length > 0) {
+        const archivePath = path.join(path.dirname(match.progressPath), "Archive.md");
+        const archiveMarkdown = await fs.readFile(archivePath, "utf-8").catch(() => "# Archive\n");
+        await fs.writeFile(archivePath, appendToArchive(archiveMarkdown, archived), "utf-8");
+      }
+
+      return textResult(JSON.stringify({ updated: true, operation: result.operation, project, section, archived: archived.length, updatedAt: new Date().toISOString(), progressPath: match.progressPath }));
     }
   );
 

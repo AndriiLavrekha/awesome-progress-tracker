@@ -5,6 +5,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { extractSection, parseFrontmatter } from "../mcp/markdown.js";
 import { readProjectTrackingState, setProjectTrackingState } from "../project-state.js";
+import { checkFreshness } from "./freshness.js";
 import { validateProgressFile } from "./validator.js";
 
 // Adapter that bridges Claude Code hook events (JSON on stdin) to the Awesome
@@ -25,6 +26,7 @@ export interface HookEvent {
 export interface HookResult {
   code: number;
   stdout?: string;
+  stderr?: string;
 }
 
 function progressPathFor(cwd: string): string {
@@ -53,6 +55,7 @@ interface SessionState {
   startedAt?: string;
   cwd?: string;
   editReminderShown?: boolean;
+  stopBlocked?: boolean;
 }
 
 async function readSessionState(sessionId: string | undefined): Promise<SessionState> {
@@ -259,7 +262,16 @@ export async function handlePreEdit(event: HookEvent): Promise<HookResult> {
   };
 }
 
-export async function handleStop(event: HookEvent): Promise<HookResult> {
+export interface HandleStopOptions {
+  // Claude Code's Stop hook can block (exit 2) to force the agent to keep
+  // working instead of ending its turn. Codex's exit-2 semantics for its
+  // equivalent hook are unverified, so callers there must pass false and
+  // fall back to the soft, non-blocking warning.
+  allowBlock?: boolean;
+}
+
+export async function handleStop(event: HookEvent, options: HandleStopOptions = {}): Promise<HookResult> {
+  const { allowBlock = true } = options;
   const cwd = event.cwd ?? process.cwd();
   const progressPath = progressPathFor(cwd);
   if (!(await fileExists(progressPath))) return { code: 0 };
@@ -273,8 +285,12 @@ export async function handleStop(event: HookEvent): Promise<HookResult> {
   const startedAt = await readSessionStartMs(event.session_id);
   if (startedAt !== null) {
     try {
-      const mtime = (await fs.stat(progressPath)).mtimeMs;
-      if (mtime >= startedAt) stale = false;
+      const freshness = await checkFreshness(progressPath, {
+        meaningfulWorkHappened: true,
+        sessionStartedAt: new Date(startedAt),
+        completionBoundary: true
+      });
+      stale = !freshness.isFresh;
     } catch {
       // keep stale = true
     }
@@ -298,9 +314,26 @@ export async function handleStop(event: HookEvent): Promise<HookResult> {
   }
 
   if (warnings.length === 0) return { code: 0 };
+
+  const message = `[project-progress] ${warnings.join(" ")}`;
+
+  if (stale && allowBlock) {
+    const state = await readSessionState(event.session_id);
+    if (!state.stopBlocked) {
+      if (event.session_id) {
+        await writeSessionState(event.session_id, { ...state, stopBlocked: true });
+      }
+      // Exit code 2 blocks Claude Code's Stop event and feeds stderr back so
+      // the agent keeps working instead of ending its turn. Capped to once
+      // per session (via stopBlocked) so a session that truly can't update
+      // Progress.md doesn't loop forever.
+      return { code: 2, stderr: message };
+    }
+  }
+
   // `systemMessage` is the portable output field surfaced to the user by both
   // Claude Code and Codex; keep the "[project-progress]" prefix for grep-ability.
-  return { code: 0, stdout: emitJson({ systemMessage: `[project-progress] ${warnings.join(" ")}` }) };
+  return { code: 0, stdout: emitJson({ systemMessage: message }) };
 }
 
 export async function runHook(sub: string, event: HookEvent): Promise<HookResult> {
@@ -314,6 +347,8 @@ export async function runHook(sub: string, event: HookEvent): Promise<HookResult
         return await handlePreEdit(event);
       case "stop":
         return await handleStop(event);
+      case "stop-soft":
+        return await handleStop(event, { allowBlock: false });
       default:
         return { code: 0 };
     }
@@ -352,6 +387,7 @@ export async function main(argv: string[]): Promise<number> {
   }
   const result = await runHook(sub, event);
   if (result.stdout) process.stdout.write(result.stdout);
+  if (result.stderr) process.stderr.write(result.stderr);
   return result.code;
 }
 

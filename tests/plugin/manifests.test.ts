@@ -128,6 +128,6 @@ describe("Codex plugin manifests", () => {
         }
       }
     }
-    expect(subs).toEqual(new Set(["session-start", "pre-commit", "pre-edit", "stop"]));
+    expect(subs).toEqual(new Set(["session-start", "pre-commit", "pre-edit", "stop-soft"]));
   });
 });

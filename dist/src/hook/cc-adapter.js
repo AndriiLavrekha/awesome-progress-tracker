@@ -5,6 +5,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { extractSection, parseFrontmatter } from "../mcp/markdown.js";
 import { readProjectTrackingState, setProjectTrackingState } from "../project-state.js";
+import { checkFreshness } from "./freshness.js";
 import { validateProgressFile } from "./validator.js";
 function progressPathFor(cwd) {
     return path.join(cwd, "project-progress", "Progress.md");
@@ -213,7 +214,8 @@ export async function handlePreEdit(event) {
         })
     };
 }
-export async function handleStop(event) {
+export async function handleStop(event, options = {}) {
+    const { allowBlock = true } = options;
     const cwd = event.cwd ?? process.cwd();
     const progressPath = progressPathFor(cwd);
     if (!(await fileExists(progressPath)))
@@ -227,9 +229,12 @@ export async function handleStop(event) {
     const startedAt = await readSessionStartMs(event.session_id);
     if (startedAt !== null) {
         try {
-            const mtime = (await fs.stat(progressPath)).mtimeMs;
-            if (mtime >= startedAt)
-                stale = false;
+            const freshness = await checkFreshness(progressPath, {
+                meaningfulWorkHappened: true,
+                sessionStartedAt: new Date(startedAt),
+                completionBoundary: true
+            });
+            stale = !freshness.isFresh;
         }
         catch {
             // keep stale = true
@@ -250,9 +255,23 @@ export async function handleStop(event) {
     }
     if (warnings.length === 0)
         return { code: 0 };
+    const message = `[project-progress] ${warnings.join(" ")}`;
+    if (stale && allowBlock) {
+        const state = await readSessionState(event.session_id);
+        if (!state.stopBlocked) {
+            if (event.session_id) {
+                await writeSessionState(event.session_id, { ...state, stopBlocked: true });
+            }
+            // Exit code 2 blocks Claude Code's Stop event and feeds stderr back so
+            // the agent keeps working instead of ending its turn. Capped to once
+            // per session (via stopBlocked) so a session that truly can't update
+            // Progress.md doesn't loop forever.
+            return { code: 2, stderr: message };
+        }
+    }
     // `systemMessage` is the portable output field surfaced to the user by both
     // Claude Code and Codex; keep the "[project-progress]" prefix for grep-ability.
-    return { code: 0, stdout: emitJson({ systemMessage: `[project-progress] ${warnings.join(" ")}` }) };
+    return { code: 0, stdout: emitJson({ systemMessage: message }) };
 }
 export async function runHook(sub, event) {
     try {
@@ -265,6 +284,8 @@ export async function runHook(sub, event) {
                 return await handlePreEdit(event);
             case "stop":
                 return await handleStop(event);
+            case "stop-soft":
+                return await handleStop(event, { allowBlock: false });
             default:
                 return { code: 0 };
         }
@@ -304,6 +325,8 @@ export async function main(argv) {
     const result = await runHook(sub, event);
     if (result.stdout)
         process.stdout.write(result.stdout);
+    if (result.stderr)
+        process.stderr.write(result.stderr);
     return result.code;
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

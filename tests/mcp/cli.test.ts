@@ -261,7 +261,7 @@ describe("npm CLI", () => {
   it("installs Hermes managed skill and MCP server with the command runner", async () => {
     const calls: Array<{ command: string; args: string[]; stdin?: string }> = [];
     const skillUrl =
-      "https://raw.githubusercontent.com/AndriiLavrekha/awesome-progress-tracker/v0.3.0/skills/project-progress/SKILL.md";
+      "https://raw.githubusercontent.com/AndriiLavrekha/awesome-progress-tracker/v0.4.0/skills/project-progress/SKILL.md";
     let mcpListCount = 0;
     const runner = async (command: string, args: string[], options?: { stdin?: string }) => {
       calls.push({ command, args, stdin: options?.stdin });
@@ -505,7 +505,7 @@ describe("npm CLI", () => {
         args: [
           "skills",
           "install",
-          "https://raw.githubusercontent.com/AndriiLavrekha/awesome-progress-tracker/v0.3.0/skills/project-progress/SKILL.md",
+          "https://raw.githubusercontent.com/AndriiLavrekha/awesome-progress-tracker/v0.4.0/skills/project-progress/SKILL.md",
           "--name",
           "project-progress",
           "--yes"
@@ -575,7 +575,7 @@ describe("npm CLI", () => {
         args: [
           "skills",
           "install",
-          "https://raw.githubusercontent.com/AndriiLavrekha/awesome-progress-tracker/v0.3.0/skills/project-progress/SKILL.md",
+          "https://raw.githubusercontent.com/AndriiLavrekha/awesome-progress-tracker/v0.4.0/skills/project-progress/SKILL.md",
           "--name",
           "project-progress",
           "--yes"
@@ -908,6 +908,7 @@ describe("npm CLI", () => {
     const markdown = await fs.readFile(progressPath, "utf-8");
 
     expect(result.createdFiles.map((file) => path.basename(file)).sort()).toEqual([
+      "Archive.md",
       "Decisions.md",
       "Open Questions.md",
       "Progress.md",

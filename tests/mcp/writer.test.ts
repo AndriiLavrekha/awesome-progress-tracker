@@ -3,8 +3,11 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
+  FOLD_THRESHOLD,
   MAX_LAST_MILESTONE_LENGTH,
   MAX_SECTION_CONTENT_LENGTH,
+  appendToArchive,
+  foldDoneSection,
   replaceFrontmatterValue,
   replaceSection,
   replaceSectionWithOperation,
@@ -86,5 +89,52 @@ describe("MCP writer helpers", () => {
     const markdown = "# T\n\n## Next Action\n\nOld.\n";
 
     expect(() => replaceSection(markdown, "Next Action", "New\n\n## Blockers\nInjected")).toThrow(/headings/);
+  });
+
+  it("leaves a Done section under the fold threshold untouched", () => {
+    const content = "- [x] Small item.";
+
+    const result = foldDoneSection(content);
+
+    expect(result).toEqual({ kept: content, archived: [] });
+  });
+
+  it("folds the oldest lines out of an oversized Done section, keeping the newest", () => {
+    const lines = Array.from({ length: 200 }, (_, index) => `- [x] Item ${index}.`);
+    const content = lines.join("\n");
+    expect(content.length).toBeGreaterThan(FOLD_THRESHOLD);
+
+    const result = foldDoneSection(content);
+
+    expect(result.kept.length).toBeLessThanOrEqual(FOLD_THRESHOLD);
+    expect(result.archived.length).toBeGreaterThan(0);
+    expect(result.kept.split("\n").at(-1)).toBe(lines.at(-1));
+    expect(result.archived[0]).toBe(lines[0]);
+    expect([...result.archived, ...result.kept.split("\n")]).toEqual(lines);
+  });
+
+  it("appends archived Done items under the archive heading with today's date", () => {
+    const archiveMarkdown = "---\nproject: T\n---\n\n# Archive\n\n## Archived Done Items\n";
+
+    const updated = appendToArchive(archiveMarkdown, ["- [x] Old item one.", "- [x] Old item two."]);
+
+    expect(updated).toContain("## Archived Done Items");
+    expect(updated).toContain("- [x] Old item one.");
+    expect(updated).toContain("- [x] Old item two.");
+  });
+
+  it("appends to existing archived content instead of replacing it", () => {
+    const archiveMarkdown = "# Archive\n\n## Archived Done Items\n\n### 2026-01-01\n\n- [x] Earlier item.\n";
+
+    const updated = appendToArchive(archiveMarkdown, ["- [x] Newer item."]);
+
+    expect(updated).toContain("- [x] Earlier item.");
+    expect(updated).toContain("- [x] Newer item.");
+  });
+
+  it("does nothing when there are no items to archive", () => {
+    const archiveMarkdown = "# Archive\n\n## Archived Done Items\n";
+
+    expect(appendToArchive(archiveMarkdown, [])).toBe(archiveMarkdown);
   });
 });

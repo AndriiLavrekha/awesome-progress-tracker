@@ -1,5 +1,5 @@
 {
-  "description": "Awesome Progress Tracker lifecycle hooks: inject resume context on session start, remind to check remaining work before the first edit, guard sensitive progress on commit, and remind to update progress at session end.",
+  "description": "Awesome Progress Tracker lifecycle hooks: inject resume context on session start, remind to check remaining work before the first edit, guard sensitive progress on commit, and block session end once (then warn) if progress wasn't updated after meaningful work.",
   "hooks": {
     "SessionStart": [
       {
