@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { execFileSync } from "node:child_process";
 import { promises as fs } from "node:fs";
 import os from "node:os";
@@ -371,6 +371,99 @@ describe("cc-adapter checkpoint stamping", () => {
       const result = await handleStop({ cwd: dir, session_id: `s-norepo-${Date.now()}` });
 
       expect(result.code).toBe(0);
+    });
+  });
+
+  it("overwrites a previously stamped checkpoint with the new values", async () => {
+    await withTrackerHome(async () => {
+      const dir = await makeRepo();
+      const file = await writeProgress(
+        dir,
+        progressDoc({
+          project: "Overwrite",
+          base_commit: "deadbeef",
+          base_branch: "old-branch",
+          worktree_dirty: "false",
+          checkpoint_at: "2020-01-01T00:00:00Z"
+        })
+      );
+      const sha = await commitAll(dir, "init");
+      await fs.writeFile(path.join(dir, "src.txt"), "work", "utf-8");
+
+      const sessionId = `s-overwrite-${Date.now()}`;
+      await handleSessionStart({ cwd: dir, session_id: sessionId });
+
+      const current = await fs.readFile(file, "utf-8");
+      await fs.writeFile(file, `${current}\n<!-- edited -->\n`, "utf-8");
+
+      const result = await handleStop({ cwd: dir, session_id: sessionId });
+
+      expect(result.code).toBe(0);
+      const frontmatter = parseFrontmatter(await fs.readFile(file, "utf-8"));
+      expect(frontmatter.base_commit).toBe(sha);
+      expect(frontmatter.base_commit).not.toBe("deadbeef");
+      expect(frontmatter.base_branch).toBe("main");
+      expect(frontmatter.base_branch).not.toBe("old-branch");
+      expect(frontmatter.worktree_dirty).toBe(true);
+      expect(frontmatter.checkpoint_at).not.toBe("2020-01-01T00:00:00Z");
+    });
+  });
+
+  it("leaves Progress.md untouched and the session unbroken when the stamp write fails", async () => {
+    await withTrackerHome(async () => {
+      const dir = await makeRepo();
+      const file = await writeProgress(dir, progressDoc({ project: "StampFail" }));
+      await commitAll(dir, "init");
+      await fs.writeFile(path.join(dir, "src.txt"), "work", "utf-8");
+
+      const sessionId = `s-stampfail-${Date.now()}`;
+      await handleSessionStart({ cwd: dir, session_id: sessionId });
+
+      const current = await fs.readFile(file, "utf-8");
+      await fs.writeFile(file, `${current}\n<!-- edited -->\n`, "utf-8");
+      const before = await fs.readFile(file, "utf-8");
+
+      const spy = vi.spyOn(fs, "writeFile").mockImplementationOnce(() => {
+        const error = Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" });
+        return Promise.reject(error);
+      });
+
+      try {
+        const result = await handleStop({ cwd: dir, session_id: sessionId });
+        expect(result.code).toBe(0);
+      } finally {
+        spy.mockRestore();
+      }
+
+      const after = await fs.readFile(file, "utf-8");
+      expect(after).toBe(before);
+    });
+  });
+
+  it("stamps checkpoint_at using the exact injected timestamp", async () => {
+    await withTrackerHome(async () => {
+      const dir = await makeRepo();
+      const file = await writeProgress(dir, progressDoc({ project: "Exact" }));
+      await commitAll(dir, "init");
+      await fs.writeFile(path.join(dir, "src.txt"), "work", "utf-8");
+
+      const sessionId = `s-exact-${Date.now()}`;
+      await handleSessionStart({ cwd: dir, session_id: sessionId });
+
+      const current = await fs.readFile(file, "utf-8");
+      await fs.writeFile(file, `${current}\n<!-- edited -->\n`, "utf-8");
+
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2024-03-15T09:30:00.000Z"));
+      try {
+        const result = await handleStop({ cwd: dir, session_id: sessionId });
+        expect(result.code).toBe(0);
+      } finally {
+        vi.useRealTimers();
+      }
+
+      const frontmatter = parseFrontmatter(await fs.readFile(file, "utf-8"));
+      expect(frontmatter.checkpoint_at).toBe("2024-03-15T09:30:00Z");
     });
   });
 });

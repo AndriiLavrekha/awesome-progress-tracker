@@ -3,8 +3,9 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { extractSection, parseFrontmatter } from "../mcp/markdown.js";
-import { replaceFrontmatterValue } from "../mcp/writer.js";
+import { replaceFrontmatterValue, writeFileAtomic } from "../mcp/writer.js";
 import { readProjectTrackingState, setProjectTrackingState } from "../project-state.js";
+// defaultGitRunner's implementation lives in checkpoint.ts, not here.
 import { defaultGitRunner as git, readCheckpoint } from "./checkpoint.js";
 import { checkFreshness } from "./freshness.js";
 import { validateProgressFile } from "./validator.js";
@@ -105,20 +106,31 @@ async function bestEffortReadProjectState(cwd: string): Promise<"unknown" | "opt
   }
 }
 
-async function bestEffortStampCheckpoint(cwd: string, progressPath: string): Promise<void> {
+async function bestEffortStampCheckpoint(
+  cwd: string,
+  progressPath: string,
+  now: Date = new Date()
+): Promise<boolean> {
   try {
-    const fields = readCheckpoint(cwd, new Date());
-    if (!fields) return;
+    const fields = readCheckpoint(cwd, now);
+    if (!fields) return false;
 
+    const fileState = await fs.stat(progressPath);
     const markdown = await fs.readFile(progressPath, "utf-8");
     let updated = replaceFrontmatterValue(markdown, "base_commit", fields.base_commit);
     updated = replaceFrontmatterValue(updated, "base_branch", fields.base_branch);
     updated = replaceFrontmatterValue(updated, "worktree_dirty", String(fields.worktree_dirty));
     updated = replaceFrontmatterValue(updated, "checkpoint_at", fields.checkpoint_at);
 
-    await fs.writeFile(progressPath, updated, "utf-8");
+    // writeFileAtomic throws "Progress file changed on disk" when another
+    // writer (e.g. an MCP update_project_progress call) raced us and won.
+    // That is the correct outcome to swallow: their content is newer and
+    // must not be clobbered by our stamp.
+    await writeFileAtomic(progressPath, updated, fileState.mtimeMs);
+    return true;
   } catch {
     // Best effort only: a stamping failure must never fail a session.
+    return false;
   }
 }
 
@@ -315,7 +327,10 @@ export async function handleStop(event: HookEvent, options: HandleStopOptions = 
   if (!stale) {
     // Only stamp when the agent actually updated Progress.md this session.
     // Stamping an unchanged file would assert a verification that never happened.
-    await bestEffortStampCheckpoint(cwd, progressPath);
+    const stamped = await bestEffortStampCheckpoint(cwd, progressPath);
+    if (!stamped) {
+      warnings.push("Checkpoint stamp failed; drift detection may be unavailable next session.");
+    }
   }
 
   try {
