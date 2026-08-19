@@ -467,3 +467,93 @@ describe("cc-adapter checkpoint stamping", () => {
     });
   });
 });
+
+describe("cc-adapter session-start drift", () => {
+  it("reports commits behind and changed files", async () => {
+    await withTrackerHome(async () => {
+      const dir = await makeRepo();
+      await writeProgress(dir, progressDoc({ project: "Drift" }));
+      const base = await commitAll(dir, "init");
+
+      await fs.writeFile(path.join(dir, "src.txt"), "one", "utf-8");
+      await commitAll(dir, "one");
+      await fs.writeFile(path.join(dir, "other.txt"), "two", "utf-8");
+      await commitAll(dir, "two");
+
+      await writeProgress(dir, progressDoc({ project: "Drift", base_commit: base }));
+
+      const result = await handleSessionStart({ cwd: dir, session_id: `s-drift-${Date.now()}` });
+
+      const context = JSON.parse(result.stdout!).hookSpecificOutput.additionalContext;
+      expect(context).toContain("Checkpoint drift");
+      expect(context).toContain("2 commits behind");
+      expect(context).toContain("src.txt");
+    });
+  });
+
+  it("stays silent when the checkpoint is HEAD", async () => {
+    await withTrackerHome(async () => {
+      const dir = await makeRepo();
+      await writeProgress(dir, progressDoc({ project: "NoDrift" }));
+      const head = await commitAll(dir, "init");
+      await writeProgress(dir, progressDoc({ project: "NoDrift", base_commit: head }));
+
+      const result = await handleSessionStart({ cwd: dir, session_id: `s-nodrift-${Date.now()}` });
+
+      const context = JSON.parse(result.stdout!).hookSpecificOutput.additionalContext;
+      expect(context).not.toContain("Checkpoint drift");
+    });
+  });
+
+  it("stays silent when there is no base_commit", async () => {
+    await withTrackerHome(async () => {
+      const dir = await makeRepo();
+      await writeProgress(dir, progressDoc({ project: "NoBase" }));
+      await commitAll(dir, "init");
+
+      const result = await handleSessionStart({ cwd: dir, session_id: `s-nobase-${Date.now()}` });
+
+      const context = JSON.parse(result.stdout!).hookSpecificOutput.additionalContext;
+      expect(context).not.toContain("Checkpoint drift");
+    });
+  });
+
+  it("reports gates that are not done", async () => {
+    await withTrackerHome(async () => {
+      const dir = await makeRepo();
+      await writeProgress(
+        dir,
+        progressDoc({ project: "Gates", gate_implementation: "done", gate_tests: "failing" })
+      );
+      await commitAll(dir, "init");
+
+      const result = await handleSessionStart({ cwd: dir, session_id: `s-gates-${Date.now()}` });
+
+      const context = JSON.parse(result.stdout!).hookSpecificOutput.additionalContext;
+      expect(context).toContain("Gates at checkpoint: tests=failing");
+      expect(context).not.toContain("implementation=");
+    });
+  });
+
+  it("preserves the closing instruction on a large drift", async () => {
+    await withTrackerHome(async () => {
+      const dir = await makeRepo();
+      await writeProgress(dir, progressDoc({ project: "BigDrift" }));
+      const base = await commitAll(dir, "init");
+
+      // Enough changed files that the drift block must trim its own list.
+      for (let index = 0; index < 20; index += 1) {
+        await fs.writeFile(path.join(dir, `file-${index}-with-a-long-name.txt`), "x", "utf-8");
+      }
+      await commitAll(dir, "many");
+
+      await writeProgress(dir, progressDoc({ project: "BigDrift", base_commit: base }));
+
+      const result = await handleSessionStart({ cwd: dir, session_id: `s-big-${Date.now()}` });
+
+      const context = JSON.parse(result.stdout!).hookSpecificOutput.additionalContext;
+      expect(context).toContain("Verify Next Action still applies before acting.");
+      expect(context).toContain("more)");
+    });
+  });
+});

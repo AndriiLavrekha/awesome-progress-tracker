@@ -6,7 +6,8 @@ import { extractSection, parseFrontmatter } from "../mcp/markdown.js";
 import { replaceFrontmatterValue, writeFileAtomic } from "../mcp/writer.js";
 import { readProjectTrackingState, setProjectTrackingState } from "../project-state.js";
 // defaultGitRunner's implementation lives in checkpoint.ts, not here.
-import { defaultGitRunner as git, readCheckpoint } from "./checkpoint.js";
+import { defaultGitRunner as git, readCheckpoint, resolveDrift } from "./checkpoint.js";
+import { renderDrift, renderGates } from "./checkpoint-render.js";
 import { checkFreshness } from "./freshness.js";
 import { validateProgressFile } from "./validator.js";
 
@@ -210,6 +211,22 @@ export async function handleSessionStart(event: HookEvent): Promise<HookResult> 
   if (blockers && blockers.trim() && blockers.trim().toLowerCase() !== "none.") {
     lines.push(`\nBlockers:\n${boundedContext(blockers, 200)}`);
   }
+
+  const baseCommit = typeof frontmatter.base_commit === "string" ? frontmatter.base_commit : "";
+  if (baseCommit) {
+    const status = resolveDrift(cwd, baseCommit);
+    if (status) {
+      // renderDrift is self-bounding to MAX_DRIFT_LENGTH: it trims its own file
+      // list to fit and never sheds prose. Do NOT wrap it in boundedContext —
+      // that truncates from the end, which would cut the closing instruction
+      // and keep the file names, exactly backwards.
+      const drift = renderDrift(status, baseCommit);
+      if (drift) lines.push(`\n${drift}`);
+    }
+  }
+
+  const gates = renderGates(frontmatter);
+  if (gates) lines.push(`\n${gates}`);
 
   return {
     code: 0,
