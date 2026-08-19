@@ -396,9 +396,18 @@ export function createServer(): McpServer {
 
       const result = replaceSectionWithOperation(markdown, section, sectionContent);
       const updated = result.markdown;
-      await writeFileAtomic(match.progressPath, updated, expectedHash);
+
+      try {
+        await writeFileAtomic(match.progressPath, updated, expectedHash);
+      } catch (error) {
+        return await conflictResult(error, match.progressPath, { section });
+      }
+
       await upsertIndexedProject(parseProjectSummary(updated, match.progressPath));
 
+      // Archiving only after the guarded write lands. Folding entries into
+      // Archive.md first would move Done items that were never removed from
+      // Progress.md when the write lost a race.
       if (archived.length > 0) {
         const archivePath = path.join(path.dirname(match.progressPath), "Archive.md");
         const archiveMarkdown = await fs.readFile(archivePath, "utf-8").catch(() => "# Archive\n");
@@ -431,7 +440,15 @@ export function createServer(): McpServer {
       const expectedHash = sha256(markdown);
       const withStatus = replaceFrontmatterValue(markdown, "status", status);
       const updated = replaceFrontmatterValue(withStatus, "last_milestone", last_milestone);
-      await writeFileAtomic(match.progressPath, updated, expectedHash);
+
+      try {
+        await writeFileAtomic(match.progressPath, updated, expectedHash);
+      } catch (error) {
+        return await conflictResult(error, match.progressPath, {
+          keys: ["status", "last_milestone"]
+        });
+      }
+
       await upsertIndexedProject(parseProjectSummary(updated, match.progressPath));
 
       return textResult(JSON.stringify({ updated: true, project, status, progressPath: match.progressPath }));
@@ -469,7 +486,13 @@ export function createServer(): McpServer {
         updated = replaceFrontmatterValue(updated, key, value);
       }
 
-      await writeFileAtomic(match.progressPath, updated, expectedHash);
+      try {
+        await writeFileAtomic(match.progressPath, updated, expectedHash);
+      } catch (error) {
+        return await conflictResult(error, match.progressPath, {
+          keys: updates.map(([key]) => key)
+        });
+      }
 
       return textResult(
         JSON.stringify({
