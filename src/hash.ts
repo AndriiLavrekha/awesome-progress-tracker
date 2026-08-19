@@ -5,8 +5,12 @@ export function sha256(value: string): string {
 }
 
 // Returns the Markdown body with any leading YAML frontmatter block removed.
-// Line endings are normalized to LF so a CRLF checkout and an LF checkout of
-// the same content hash identically.
+// On the stripping path the body is rejoined with LF, so a CRLF checkout and
+// an LF checkout of the same frontmatter-bearing document hash identically.
+// Documents with no frontmatter, or with unterminated frontmatter, are
+// returned as-is and are NOT line-ending normalized — line endings are part
+// of their content. That asymmetry is deliberate: those documents have no
+// frontmatter boundary to normalize around.
 export function bodyOf(markdown: string): string {
   const text = markdown.replace(/^\uFEFF/, "");
   const lines = text.split(/\r?\n/);

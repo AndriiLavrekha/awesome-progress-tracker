@@ -28,6 +28,19 @@ describe("bodyOf", () => {
   it("strips a leading byte order mark", () => {
     expect(bodyOf("\uFEFF---\na: 1\n---\nbody\n")).toBe("body\n");
   });
+
+  it("returns an empty string for an empty document", () => {
+    expect(bodyOf("")).toBe("");
+  });
+
+  it("returns an empty string for frontmatter with no body", () => {
+    expect(bodyOf("---\n---\n")).toBe("");
+  });
+
+  it("does not treat a four-dash horizontal rule as a frontmatter fence", () => {
+    const markdown = "----\nsome text\n";
+    expect(bodyOf(markdown)).toBe(markdown);
+  });
 });
 
 describe("bodyHash", () => {
@@ -47,5 +60,19 @@ describe("bodyHash", () => {
     const lf = "---\na: 1\n---\n\n## Next Action\n\nDo the thing.\n";
     const crlf = "---\r\na: 1\r\n---\r\n\r\n## Next Action\r\n\r\nDo the thing.\r\n";
     expect(bodyHash(crlf)).toBe(bodyHash(lf));
+  });
+
+  // Pins the deliberate asymmetry: without frontmatter there is no fence to
+  // normalize around, so line endings are part of the content and CRLF vs LF
+  // hash differently. This is NOT a bug — it is what stops the header
+  // comment on bodyOf from silently drifting back to a universal claim.
+  it("treats CRLF and LF bodies as different when there is no frontmatter", () => {
+    expect(bodyHash("a\r\nb\r\n")).not.toBe(bodyHash("a\nb\n"));
+  });
+
+  it("is a stable 64-hex-char hash for an empty document", () => {
+    const hash = bodyHash("");
+    expect(hash).toBe(bodyHash(""));
+    expect(hash).toMatch(/^[0-9a-f]{64}$/);
   });
 });
