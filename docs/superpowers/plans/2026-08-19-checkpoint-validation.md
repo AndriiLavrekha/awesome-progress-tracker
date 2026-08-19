@@ -543,6 +543,12 @@ git commit -m "feat: resolve checkpoint drift across ancestor, diverged, and mis
 
 ## Task 4: Drift and gate rendering
 
+> **Amended after the Task 3 review.** `DriftStatus` gained two variants during
+> Task 3: `behind` (the tree was reset backwards past the checkpoint) and
+> `unknown` (git could not compare them, as in a shallow clone). The `switch` in
+> `renderDrift` must handle all six variants, or TypeScript exhaustiveness
+> checking will fail the build.
+
 **Files:**
 - Modify: `src/hook/checkpoint.ts`
 - Test: `tests/hook/checkpoint.test.ts` (append a new `describe` block)
@@ -621,6 +627,34 @@ describe("renderDrift", () => {
     const text = renderDrift({ kind: "missing", head: HEAD, branch: "main" }, BASE);
 
     expect(text).toContain("no longer in this repository's history");
+    expect(text).not.toContain("Changed since checkpoint");
+  });
+
+  it("renders a backwards reset as behind the checkpoint", () => {
+    const text = renderDrift(
+      { kind: "behind", onlyOnCheckpoint: 3, head: HEAD, branch: "main", files: ["a.ts"] },
+      BASE
+    );
+
+    expect(text).toContain("3 commits behind the stored checkpoint");
+    expect(text).toContain("reset backwards past it");
+    expect(text).toContain("  a.ts");
+  });
+
+  it("uses singular wording for a single commit behind the checkpoint", () => {
+    const text = renderDrift(
+      { kind: "behind", onlyOnCheckpoint: 1, head: HEAD, branch: "main", files: [] },
+      BASE
+    );
+
+    expect(text).toContain("1 commit behind the stored checkpoint");
+  });
+
+  it("renders an undetermined comparison without inventing counts", () => {
+    const text = renderDrift({ kind: "unknown", head: HEAD, branch: "main" }, BASE);
+
+    expect(text).toContain("could not be determined");
+    expect(text).toContain("shallow clone");
     expect(text).not.toContain("Changed since checkpoint");
   });
 });
@@ -704,6 +738,21 @@ export function renderDrift(status: DriftStatus, baseCommit: string): string {
         `${status.onlyOnCheckpoint} on the checkpoint side, ${status.onlyOnHead} on HEAD.` +
         `${renderFiles(status.files)}\n${CLOSING}`
       );
+    case "behind": {
+      const noun = status.onlyOnCheckpoint === 1 ? "commit" : "commits";
+      return (
+        `Checkpoint drift: HEAD ${shortSha(status.head)} (branch ${status.branch}) is ` +
+        `${status.onlyOnCheckpoint} ${noun} behind the stored checkpoint ${base}, so the ` +
+        `tree was reset backwards past it.${renderFiles(status.files)}
+${CLOSING}`
+      );
+    }
+    case "unknown":
+      return (
+        `Checkpoint drift could not be determined: git could not compare stored ` +
+        `base_commit ${base} against HEAD ${shortSha(status.head)} (branch ` +
+        `${status.branch}). This is expected in a shallow clone. ${CLOSING}`
+      );
   }
 }
 
@@ -728,7 +777,7 @@ export function renderGates(frontmatter: Record<string, string | boolean | numbe
 
 Run: `npx vitest run tests/hook/checkpoint.test.ts`
 
-Expected: PASS, 18 tests in the file.
+Expected: PASS with zero failures. Do not match an exact historical count: the file grew with the tests added during the Task 3 review round.
 
 - [ ] **Step 5: Commit**
 
@@ -911,6 +960,14 @@ git commit -m "feat: stamp checkpoint fields from the Stop hook"
 
 ## Task 6: Report drift and gates at session start
 
+> **Amended after the Task 4 review.** Measured rendering exceeded the
+> intended 400-character budget on all three file-list variants (`ahead`
+> 446, `diverged` 481, `behind` 490). Truncating from the end would have
+> dropped the closing "Verify Next Action still applies" instruction while
+> keeping the file list. `renderDrift` now bounds itself against
+> `MAX_DRIFT_LENGTH`, shedding file-list entries rather than prose, so this
+> task must NOT re-truncate it.
+
 **Files:**
 - Modify: `src/hook/cc-adapter.ts` (`handleSessionStart`)
 - Test: `tests/plugin/cc-adapter.test.ts` (append)
@@ -1004,8 +1061,12 @@ In `handleSessionStart`, after the existing `if (blockers && ...) { lines.push(.
   if (baseCommit) {
     const status = resolveDrift(cwd, baseCommit);
     if (status) {
+      // renderDrift is self-bounding to MAX_DRIFT_LENGTH: it trims its own
+      // file list to fit and never sheds prose. Do NOT wrap it in
+      // boundedContext — that truncates from the end, which would cut the
+      // closing instruction and keep the file names, exactly backwards.
       const drift = renderDrift(status, baseCommit);
-      if (drift) lines.push(`\n${boundedContext(drift, 400)}`);
+      if (drift) lines.push(`\n${drift}`);
     }
   }
 
