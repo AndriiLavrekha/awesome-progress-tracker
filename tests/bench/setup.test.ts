@@ -11,8 +11,6 @@ async function makeBundle(): Promise<string> {
   execFileSync("git", ["config", "user.email", "t@example.com"], { cwd: repo, stdio: "ignore" });
   execFileSync("git", ["config", "user.name", "Test"], { cwd: repo, stdio: "ignore" });
 
-  await fs.mkdir(path.join(repo, "project-progress"), { recursive: true });
-  await fs.writeFile(path.join(repo, "project-progress", "Progress.md"), "# P\n", "utf-8");
   await fs.writeFile(path.join(repo, "code.ts"), "export const a = 1;\n", "utf-8");
 
   execFileSync("git", ["add", "."], { cwd: repo, stdio: "ignore" });
@@ -31,40 +29,82 @@ describe("materialize", () => {
     await materialize(bundle, target);
 
     expect(await fs.readFile(path.join(target, "code.ts"), "utf-8")).toBe("export const a = 1;\n");
-    await expect(fs.access(path.join(target, "project-progress", "Progress.md"))).resolves
-      .toBeUndefined();
   });
 });
 
 describe("applyCondition", () => {
-  it("leaves project-progress in place for the tracker condition", async () => {
+  async function makeScenario(): Promise<string> {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "bench-scenario-"));
+    const overlay = path.join(dir, "conditions", "tracker", "project-progress");
+    await fs.mkdir(overlay, { recursive: true });
+    await fs.writeFile(path.join(overlay, "Progress.md"), "## Next Action\n\nWire it.\n", "utf-8");
+    return dir;
+  }
+
+  it("copies the condition overlay into the tree", async () => {
     const bundle = await makeBundle();
+    const scenarioDir = await makeScenario();
     const target = path.join(await fs.mkdtemp(path.join(os.tmpdir(), "bench-t-")), "repo");
     await materialize(bundle, target);
 
-    await applyCondition(target, "tracker");
+    await applyCondition(target, "tracker", scenarioDir);
 
-    await expect(fs.access(path.join(target, "project-progress"))).resolves.toBeUndefined();
+    expect(
+      await fs.readFile(path.join(target, "project-progress", "Progress.md"), "utf-8")
+    ).toContain("Wire it.");
   });
 
-  it("removes project-progress for the baseline condition", async () => {
+  it("leaves no overlay for the baseline condition", async () => {
     const bundle = await makeBundle();
+    const scenarioDir = await makeScenario();
     const target = path.join(await fs.mkdtemp(path.join(os.tmpdir(), "bench-b-")), "repo");
     await materialize(bundle, target);
 
-    await applyCondition(target, "baseline");
+    await applyCondition(target, "baseline", scenarioDir);
 
     await expect(fs.access(path.join(target, "project-progress"))).rejects.toThrow();
   });
 
-  it("leaves the tree untouched for an unrecognized named condition", async () => {
+  it("leaves the tree untouched for a condition with no overlay", async () => {
     const bundle = await makeBundle();
+    const scenarioDir = await makeScenario();
     const target = path.join(await fs.mkdtemp(path.join(os.tmpdir(), "bench-x-")), "repo");
     await materialize(bundle, target);
 
-    await applyCondition(target, "some-competitor");
+    await applyCondition(target, "some-competitor", scenarioDir);
 
-    await expect(fs.access(path.join(target, "project-progress"))).resolves.toBeUndefined();
+    await expect(fs.access(path.join(target, "project-progress"))).rejects.toThrow();
+    expect(await fs.readFile(path.join(target, "code.ts"), "utf-8")).toBe("export const a = 1;\n");
+  });
+
+  it("commits the overlay so both conditions start from a clean tree", async () => {
+    const bundle = await makeBundle();
+    const scenarioDir = await makeScenario();
+    const target = path.join(await fs.mkdtemp(path.join(os.tmpdir(), "bench-c-")), "repo");
+    await materialize(bundle, target);
+
+    await applyCondition(target, "tracker", scenarioDir);
+
+    const status = execFileSync("git", ["status", "--porcelain"], { cwd: target, encoding: "utf-8" });
+    expect(status.trim()).toBe("");
+  });
+
+  it("leaves nothing about the tracker recoverable in a baseline checkout", async () => {
+    const bundle = await makeBundle();
+    const scenarioDir = await makeScenario();
+    const target = path.join(await fs.mkdtemp(path.join(os.tmpdir(), "bench-h-")), "repo");
+    await materialize(bundle, target);
+
+    await applyCondition(target, "baseline", scenarioDir);
+
+    // The first fixture committed project-progress and then deleted the
+    // working copy, so a baseline agent recovered the resume note from git
+    // log. Baseline must be blind in history as well as on disk.
+    const log = execFileSync("git", ["log", "--all", "--name-only", "--format="], {
+      cwd: target,
+      encoding: "utf-8"
+    });
+    expect(log).not.toContain("project-progress");
   });
 
   it("names the two built-in conditions", () => {

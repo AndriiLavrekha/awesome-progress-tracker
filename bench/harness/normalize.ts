@@ -20,10 +20,28 @@ function billedTokens(usage: Usage | undefined): number {
   );
 }
 
-function toolPath(input: Record<string, unknown> | undefined): string {
+function slashes(value: string): string {
+  return value.replace(/\\/g, "/").replace(/\/+$/, "");
+}
+
+// Session transcripts record absolute paths; a scenario's expectations are
+// written relative to the repository root, because that is the only form that
+// survives being run in a fresh temp directory. Without relativizing, no
+// mustTouch entry can ever match and every edit is scored as a wrong touch.
+function relativize(filePath: string, root: string): string {
+  if (!root) return filePath;
+  const prefix = slashes(root) + "/";
+  // Windows paths differ in case between what the shell reports and what the
+  // tool recorded, so compare case-insensitively but return the recorded form.
+  return filePath.toLowerCase().startsWith(prefix.toLowerCase())
+    ? filePath.slice(prefix.length)
+    : filePath;
+}
+
+function toolPath(input: Record<string, unknown> | undefined, root: string): string {
   if (!input) return "";
   const value = input.file_path ?? input.path ?? input.notebook_path;
-  return typeof value === "string" ? value.replace(/\\/g, "/") : "";
+  return typeof value === "string" ? relativize(slashes(value), root) : "";
 }
 
 // Converts a Claude Code session transcript into the harness's normalized
@@ -37,7 +55,7 @@ function toolPath(input: Record<string, unknown> | undefined): string {
 //
 // Sidechain records are dropped. They belong to subagents, which run their own
 // budget and would otherwise be scored as if the main agent had said it.
-export function normalizeSession(jsonl: string): TranscriptEvent[] {
+export function normalizeSession(jsonl: string, runRoot = ""): TranscriptEvent[] {
   const events: TranscriptEvent[] = [];
 
   for (const line of jsonl.split(/\r?\n/)) {
@@ -75,7 +93,7 @@ export function normalizeSession(jsonl: string): TranscriptEvent[] {
           text: "",
           tokens: 0,
           name: block.name,
-          path: toolPath(block.input as Record<string, unknown> | undefined)
+          path: toolPath(block.input as Record<string, unknown> | undefined, runRoot)
         });
       }
     }

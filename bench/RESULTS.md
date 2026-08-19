@@ -4,9 +4,18 @@
 
 Each scenario is a repository frozen mid-task, distributed as a git bundle so
 it restores byte-exactly. `setup` clones the bundle into a temp directory and
-applies a named condition; `baseline` removes `project-progress/`, `tracker`
-leaves it in place, and any other name leaves the tree as restored so a
-competing memory system can be configured by hand.
+applies a named condition. A condition is an overlay: `conditions/<name>/` is
+copied into the restored tree and committed, so every condition starts from a
+clean working tree and differs only in what it added. `baseline` ships no
+overlay and is the bare repository; `tracker` ships `project-progress/`; a
+competing memory system is added by dropping its files under its own condition
+name, with no change to the harness.
+
+A condition adds; it never removes. The first version of this harness deleted
+`project-progress/` for baseline, which left the file in the bundle's git
+history — and the first baseline run opened with "Progress.md deleted in
+working tree but tells me next step", having recovered the resume note with
+`git log`. What a condition does not add is now absent from history too.
 
 The clone pins `core.autocrlf=false` and `core.eol=lf`, because a machine with
 the Windows default would otherwise restore CRLF content and make a score
@@ -47,10 +56,29 @@ dominated by model latency and sampling variance rather than resume quality.
 |----|----------------|---------------------|
 | 01-interrupted-refactor | `foldDoneSection` implemented but never called | wire it into `updateSection` in `src/server.ts` |
 
+## Discarded runs
+
+The first pair of runs, on 2026-08-20, is not reported. Three defects made the
+numbers meaningless, and all three are fixed:
+
+- Baseline was not blind. `project-progress/Progress.md` was deleted from the
+  working tree but remained in git history, and the baseline agent read it from
+  there.
+- `wrong-file-touches` counted every edit. Transcript paths are absolute while
+  `mustTouch` entries are repo-relative, so no edit could ever match the allow
+  list. `normalize` now takes `--root` and relativizes.
+- `tokens-to-correct` reported "never reached" for a run that had edited the
+  correct file, for the same path mismatch. The scenario's third matcher is now
+  anchored against the relative path.
+
+The scenario's `mustTouch` list is now empty. A run legitimately writes a test
+file, a `package.json`, and its own `Progress.md`; none of that speaks to how
+well it resumed, and the deny list carries the whole signal.
+
 ## Results
 
-No runs recorded yet. Populate this table by running each scenario under each
-condition and pasting the scores.
+No valid runs recorded yet. Populate this table by running each scenario under
+each condition and pasting the scores.
 
 | scenario | condition | tokens-to-correct | duplicate-work | wrong-file-touches |
 |----------|-----------|-------------------|----------------|--------------------|

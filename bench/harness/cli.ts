@@ -16,7 +16,7 @@ function usage(): string {
   return [
     "Usage:",
     "  npm run bench -- setup <scenario-id> [--condition tracker|baseline|<name>]",
-    "  npm run bench -- normalize <session.jsonl> <transcript.jsonl>",
+    "  npm run bench -- normalize <session.jsonl> <transcript.jsonl> [--root <run-dir>]",
     "  npm run bench -- score <scenario-id> <transcript.jsonl>",
     ""
   ].join("\n");
@@ -39,7 +39,7 @@ async function runSetup(argv: string[]): Promise<number> {
   const target = path.join(await fs.mkdtemp(path.join(os.tmpdir(), "bench-")), `${id}-${condition}`);
 
   await materialize(scenario.bundlePath, target);
-  await applyCondition(target, condition);
+  await applyCondition(target, condition, scenario.dir);
 
   const readme = await fs
     .readFile(path.join(scenario.dir, "README.md"), "utf-8")
@@ -76,7 +76,7 @@ async function runNormalize(argv: string[]): Promise<number> {
     return 1;
   }
 
-  const events = normalizeSession(await fs.readFile(sessionPath, "utf-8"));
+  const events = normalizeSession(await fs.readFile(sessionPath, "utf-8"), flag(argv, "root", ""));
   await fs.writeFile(outPath, events.map((event) => JSON.stringify(event)).join("\n") + "\n", "utf-8");
 
   process.stdout.write(`wrote ${events.length} events to ${outPath}\n`);

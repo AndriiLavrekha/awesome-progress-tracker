@@ -2,11 +2,9 @@
   "correctNextAction": [
     "wire\\s+folddonesection",
     "call\\s+folddonesection.*server",
-    "Edit src/server\\.ts"
+    "^Edit src/server\\.ts$"
   ],
-  "mustTouch": [
-    "src/server.ts"
-  ],
+  "mustTouch": [],
   "mustNotTouch": [
     "src/writer.ts"
   ],

@@ -98,3 +98,44 @@ describe("normalizeSession", () => {
     expect(normalizeSession(assistantLine([{ type: "thinking", thinking: "hm" }], 10))).toEqual([]);
   });
 });
+
+describe("normalizeSession path roots", () => {
+  it("relativizes a tool path against the run directory", () => {
+    // Session transcripts record absolute paths, while a scenario's
+    // expectations are repo-relative. Without this the two never match and
+    // every edit looks like a wrong-file touch.
+    const jsonl = assistantLine(
+      [{ type: "tool_use", name: "Edit", input: { file_path: "C:/Temp/run-1/src/server.ts" } }],
+      5
+    );
+
+    expect(normalizeSession(jsonl, "C:/Temp/run-1")[0].path).toBe("src/server.ts");
+  });
+
+  it("matches a root case-insensitively and ignores separator style", () => {
+    const jsonl = assistantLine(
+      [{ type: "tool_use", name: "Edit", input: { file_path: "C:/Temp/Run-1/src/server.ts" } }],
+      5
+    );
+
+    expect(normalizeSession(jsonl, "c:\\temp\\run-1")[0].path).toBe("src/server.ts");
+  });
+
+  it("leaves a path outside the run directory absolute", () => {
+    const jsonl = assistantLine(
+      [{ type: "tool_use", name: "Read", input: { file_path: "D:/elsewhere/notes.md" } }],
+      5
+    );
+
+    expect(normalizeSession(jsonl, "C:/Temp/run-1")[0].path).toBe("D:/elsewhere/notes.md");
+  });
+
+  it("keeps paths as recorded when no root is given", () => {
+    const jsonl = assistantLine(
+      [{ type: "tool_use", name: "Edit", input: { file_path: "C:/Temp/run-1/src/server.ts" } }],
+      5
+    );
+
+    expect(normalizeSession(jsonl)[0].path).toBe("C:/Temp/run-1/src/server.ts");
+  });
+});
