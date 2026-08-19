@@ -5,7 +5,7 @@ status: in_progress
 path: C:/Users/nkinc/Documents/progress-tracker
 agent_last_used: claude
 updated: 2026-08-19
-last_milestone: Plan A complete: checkpoint validation and verification gates shipped on feat/resume-hardening
+last_milestone: Plans A and B complete: checkpoint validation, gates, and session handoff shipped
 deployed: true
 deployment_url: https://github.com/AndriiLavrekha/awesome-progress-tracker/releases/tag/v0.2.3
 sensitivity: normal
@@ -39,17 +39,17 @@ The approved direction is skill-first and project-local:
 
 ## Last Session
 
-Executed plan A (checkpoint validation and verification gates) end to end via subagent-driven development: a fresh implementer per task, then spec-compliance review, then code-quality review, with fix rounds until each cleared. 8/8 tasks done, 19 commits, suite 131 to 197 passing.
+Plans A and B both complete on `feat/resume-hardening`: 15/27 tasks, 31 commits, suite 131 to 241 passing.
 
-Shipped: eight optional frontmatter keys (`base_commit`, `base_branch`, `worktree_dirty`, `checkpoint_at`, four `gate_*`), `src/hook/checkpoint.ts` (git reading + drift resolution), `src/hook/checkpoint-render.ts` (self-bounding rendering), Stop-hook stamping through `writeFileAtomic`, SessionStart drift reporting, and the `set_project_gates` MCP tool. ADR 0018 records it.
+Plan B shipped session handoff: `session_id` and `handoff` written pessimistically at SessionStart and cleared at Stop, so a session that dies leaves `interrupted` for the next session to report. Two mechanisms had to change first or the feature would have broken them silently. Freshness moved from file mtime to a hash of the Markdown body (`src/hash.ts`), because SessionStart writing frontmatter every session would otherwise push mtime past session start and disable the ADR 0017 fail-closed gate with every test still green. And the meaningful-work predicate stopped counting `project-progress/` paths, or the tracker's own writes would nag every read-only session. ADR 0019 records both.
 
-Review caught six defects that spec compliance did not, all in the plan rather than the implementations: `Date.parse` accepting non-ISO input while the error claimed ISO 8601; `merge-base --is-ancestor` failures on shallow clones being reported as a confident zero-count divergence; a `git reset --hard` backwards reported as two-way divergence; rendered drift exceeding its 400-char budget so end-truncation dropped the actionable closing line while keeping file names; unbounded branch-name interpolation reintroducing that overflow at 300 chars; and the Stop hook writing the canonical resume file with a plain `fs.writeFile`, risking both a lost update against concurrent MCP writes and a truncated file.
+Review continued to earn its cost. It found the ADR 0016 comment overclaiming CRLF equivalence for frontmatter-less documents; a freshness fallback test that would have passed even with the fallback deleted; a `shouldBlock` assertion that never proved the value was parameterized; and `porcelainPath` corrupting octal-escaped filenames, now renamed `porcelainPathKey` with its contract stated.
 
-`DriftStatus` consequently has six variants, not four. Rendering bounds itself rather than being externally truncated. Drift is injected before the Resume Snapshot so an agent learns its state may be stale before absorbing it.
+Bug injection is now standard practice for any test claiming to guard an invariant. It caught two inert guards in plan A and confirmed three real ones in plan B: moving the SessionStart write before the file read fails exactly the three handoff-reporting tests, which is what proves the read-before-write ordering is pinned.
 
 ## Next Action
 
-Continue subagent-driven execution of plan B, `docs/superpowers/plans/2026-08-19-session-handoff.md`, starting from Task 1 (`src/hash.ts` body hashing). Then plan C (concurrency hardening) and plan D (benchmark). Plan B Task 4 is load-bearing: SessionStart writing frontmatter makes `gitHasChanges` always true, so it must stop counting `project-progress/` paths or every read-only session gets nagged.
+Execute plan C, `docs/superpowers/plans/2026-08-19-concurrency-hardening.md`, then plan D. Plan C Task 1 was resequenced during execution: it now migrates all FIVE `writeFileAtomic` call sites in the same commit rather than leaving the tree un-typecheckable between tasks. The two hook call sites keep swallowing the conflict throw permanently, since losing a stamp is correct when another writer's content is newer.
 
 ## Remaining Work
 
@@ -90,7 +90,7 @@ Continue subagent-driven execution of plan B, `docs/superpowers/plans/2026-08-19
 - [x] Brainstorm the resume-hardening roadmap and write four design specs.
 - [x] Write four task-by-task implementation plans from those specs.
 - [x] Implement plan A: checkpoint validation and verification gates (ADR 0018).
-- [ ] Implement plan B: session handoff and body-hash freshness (ADR 0019).
+- [x] Implement plan B: session handoff and body-hash freshness (ADR 0019).
 - [ ] Implement plan C: content-hash write guard and mergeable conflicts (ADR 0020).
 - [ ] Implement plan D: resumability benchmark harness and first fixture (ADR 0021).
 - [ ] Document git + `Session Log.md` as the existing checkpoint-history answer in README (rejects a separate journal).
@@ -126,11 +126,12 @@ Continue subagent-driven execution of plan B, `docs/superpowers/plans/2026-08-19
 - [x] Clarified in SKILL.md that `Resume Snapshot`/`Last Session` are replace-wholesale fields, not append targets.
 - [x] Wrote four resume-hardening specs and four implementation plans on `feat/resume-hardening`.
 - [x] Shipped plan A: optional checkpoint/gate frontmatter, drift resolution and rendering, Stop-hook stamping, SessionStart drift injection, and `set_project_gates` (ADR 0018).
+- [x] Shipped plan B: body-hash freshness with mtime fallback, progress-aware meaningful-work predicate, and pessimistic handoff state (ADR 0019).
 - [x] Made the Stop hook fail-closed on Claude Code (exit 2, once per session via `stopBlocked`), kept Codex on soft-only `stop-soft` until verified (ADR 0017).
 
 ## Blockers
 
-None. Plan A is shipped on `feat/resume-hardening`; plans B, C, and D remain. One consequence is deliberately deferred to plan B Task 4: stamping leaves `Progress.md` dirty and the meaningful-work predicate still counts `project-progress/` paths. The pending ADR 0016/0017 release on `main` is independent and still unreleased. ADR 0015 defines Hermes compatibility as Skill + MCP with lifecycle hooks deferred.
+None. Plans A and B are shipped on `feat/resume-hardening`; plans C and D remain. The deferred dirty-tree consequence from plan A was closed by plan B Task 4. The pending ADR 0016/0017 release on `main` is independent and still unreleased. ADR 0015 defines Hermes compatibility as Skill + MCP with lifecycle hooks deferred.
 
 ## Deployment
 

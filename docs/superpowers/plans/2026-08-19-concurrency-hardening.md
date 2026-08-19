@@ -25,6 +25,14 @@
 
 ## Task 1: Hash-based write guard
 
+> **Resequenced during execution.** As originally written, Task 1 changed the
+> `writeFileAtomic` signature and Task 3 fixed the call sites, leaving the repo
+> un-typecheckable in between. There are now FIVE call sites, not three: the
+> checkpoint plan added `bestEffortRecordSessionEnd` and the handoff plan added
+> `bestEffortMarkHandoff`, both in `src/hook/cc-adapter.ts`. Task 1 therefore
+> migrates every call site mechanically in the same commit, so the tree stays
+> green. Conflict-payload handling still arrives in Tasks 2 and 3.
+
 **Files:**
 - Modify: `src/mcp/writer.ts` (`writeFileAtomic`)
 - Test: `tests/mcp/writer.test.ts:51` (rewrite the existing conflict test, then append)
@@ -165,16 +173,43 @@ export async function writeFileAtomic(
 }
 ```
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [ ] **Step 5: Migrate every call site in the same commit**
 
-Run: `npx vitest run tests/mcp/writer.test.ts`
+Five call sites pass the old `expectedMtimeMs`. All must move to the hash in
+this commit so the tree never lands broken. In each, replace the `fs.stat` +
+`fileState.mtimeMs` pair with `sha256` of the content just read:
 
-Expected: PASS. Other suites will still fail to typecheck until Task 2 updates the call sites; that is expected at this point.
+- `src/mcp/server.ts` — `update_project_progress`, `mark_project_status`, `set_project_gates`
+- `src/hook/cc-adapter.ts` — `bestEffortMarkHandoff`, `bestEffortRecordSessionEnd`
 
-- [ ] **Step 6: Commit**
+The pattern in every case:
+
+```ts
+      const markdown = await fs.readFile(progressPath, "utf-8");
+      const expectedHash = sha256(markdown);
+      // ...transform...
+      await writeFileAtomic(progressPath, updated, expectedHash);
+```
+
+Add `sha256` to the imports from `../hash.js` (server.ts) or `../hash.js`
+(cc-adapter.ts) as appropriate, and drop the now-unused `fs.stat` calls.
+
+Do NOT add conflict-payload handling yet — that is Tasks 2 and 3. The two hook
+call sites keep swallowing the throw in their existing catch, which stays
+correct permanently: losing a stamp is the right outcome when another writer's
+content is newer.
+
+- [ ] **Step 6: Run the full suite**
+
+Run: `npm test && npm run typecheck`
+
+Expected: BOTH pass. The tree must be green at this commit — if typecheck
+fails, a call site was missed.
+
+- [ ] **Step 7: Commit**
 
 ```bash
-git add src/mcp/writer.ts tests/mcp/writer.test.ts
+git add src/mcp/writer.ts src/mcp/server.ts src/hook/cc-adapter.ts tests/mcp/writer.test.ts
 git commit -m "feat: guard progress writes with a content hash instead of mtime"
 ```
 
@@ -315,10 +350,19 @@ git commit -m "feat: build mergeable conflict payloads for progress writes"
 
 ---
 
-## Task 3: Wire the three write paths
+## Task 3: Wire the four write paths
+
+> **Amended during execution.** A FOURTH call site now exists that did not when
+> this plan was written: `bestEffortStampCheckpoint` in `src/hook/cc-adapter.ts`
+> was routed through `writeFileAtomic` during the checkpoint plan's Task 5
+> review, because a plain `fs.writeFile` on `Progress.md` risked both a lost
+> update against concurrent MCP writes and a truncated canonical resume file.
+> It must migrate to the hash signature along with the three MCP handlers, or
+> the build breaks.
 
 **Files:**
 - Modify: `src/mcp/server.ts` (`update_project_progress`, `mark_project_status`, `set_project_gates`)
+- Modify: `src/hook/cc-adapter.ts` (`bestEffortStampCheckpoint`)
 
 - [ ] **Step 1: Update `update_project_progress`**
 
@@ -422,13 +466,33 @@ Add `sha256` to the imports from `../hash.js`.
       );
 ```
 
-- [ ] **Step 4: Remove the now-unused stat calls**
+- [ ] **Step 4: Update the Stop-hook stamp call site**
+
+In `src/hook/cc-adapter.ts`, `bestEffortStampCheckpoint` currently captures
+`fileState.mtimeMs` and passes it to `writeFileAtomic`. Switch it to the hash:
+
+```ts
+      const markdown = await fs.readFile(progressPath, "utf-8");
+      const expectedHash = sha256(markdown);
+      // ...four replaceFrontmatterValue calls...
+      await writeFileAtomic(progressPath, updated, expectedHash);
+```
+
+Drop the now-unused `fs.stat` call and add `sha256` to the imports from
+`../hash.js`.
+
+Do NOT add conflict-payload handling here. The hook has no caller to return a
+payload to: a `ProgressConflictError` must stay swallowed by the existing
+best-effort catch, because losing the stamp is the correct outcome when another
+writer's content is newer. Confirm the existing stamp-failure test still passes.
+
+- [ ] **Step 5: Remove the now-unused stat calls**
 
 Run: `grep -n "fs.stat" src/mcp/server.ts`
 
 Expected: no remaining `fs.stat` calls in the three write handlers. Remove any that are left over.
 
-- [ ] **Step 5: Verify**
+- [ ] **Step 6: Verify**
 
 Run: `npm run typecheck`
 
@@ -438,10 +502,10 @@ Run: `npm test`
 
 Expected: PASS, full suite.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add src/mcp/server.ts
+git add src/mcp/server.ts src/hook/cc-adapter.ts
 git commit -m "feat: return mergeable conflicts from every progress write path"
 ```
 
@@ -584,6 +648,7 @@ Spec coverage, section by section:
 - typed `ProgressConflictError` — Task 1
 - structured payload with `currentContent` — Tasks 2 and 3
 - applies to `update_project_progress` and `mark_project_status` — Task 3
+- the Stop-hook stamp call site migrated to the hash signature — Task 3, Step 4
 - temp-file-plus-rename preserved — Task 1
 - identical-bytes rewrite permitted — Task 1
 - interleaved writers, exactly one wins — Task 4
