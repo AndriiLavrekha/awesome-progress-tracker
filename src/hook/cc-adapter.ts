@@ -203,15 +203,9 @@ export async function handleSessionStart(event: HookEvent): Promise<HookResult> 
     `Project: ${frontmatter.project ?? "(unknown)"} | Status: ${frontmatter.status ?? "?"} | Updated: ${frontmatter.updated ?? "?"}`
   ];
 
-  const resume = extractSection(markdown, "Resume Snapshot");
-  const next = extractSection(markdown, "Next Action");
-  const blockers = extractSection(markdown, "Blockers");
-  if (resume) lines.push(`\nResume Snapshot:\n${boundedContext(resume, 800)}`);
-  if (next) lines.push(`\nNext Action:\n${boundedContext(next, 300)}`);
-  if (blockers && blockers.trim() && blockers.trim().toLowerCase() !== "none.") {
-    lines.push(`\nBlockers:\n${boundedContext(blockers, 200)}`);
-  }
-
+  // Drift is pushed before Resume Snapshot/Next Action/Blockers so the agent
+  // is warned that the recorded state may be stale before it absorbs that
+  // state, not after.
   const baseCommit = typeof frontmatter.base_commit === "string" ? frontmatter.base_commit : "";
   if (baseCommit) {
     const status = resolveDrift(cwd, baseCommit);
@@ -223,6 +217,15 @@ export async function handleSessionStart(event: HookEvent): Promise<HookResult> 
       const drift = renderDrift(status, baseCommit);
       if (drift) lines.push(`\n${drift}`);
     }
+  }
+
+  const resume = extractSection(markdown, "Resume Snapshot");
+  const next = extractSection(markdown, "Next Action");
+  const blockers = extractSection(markdown, "Blockers");
+  if (resume) lines.push(`\nResume Snapshot:\n${boundedContext(resume, 800)}`);
+  if (next) lines.push(`\nNext Action:\n${boundedContext(next, 300)}`);
+  if (blockers && blockers.trim() && blockers.trim().toLowerCase() !== "none.") {
+    lines.push(`\nBlockers:\n${boundedContext(blockers, 200)}`);
   }
 
   const gates = renderGates(frontmatter);

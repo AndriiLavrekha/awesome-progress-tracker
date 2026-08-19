@@ -552,14 +552,63 @@ describe("cc-adapter session-start drift", () => {
       const result = await handleSessionStart({ cwd: dir, session_id: `s-big-${Date.now()}` });
 
       const context = JSON.parse(result.stdout!).hookSpecificOutput.additionalContext;
-      expect(context.trimEnd().endsWith("Verify Next Action still applies before acting.")).toBe(true);
-      expect(context).toContain("more)");
+      // The drift block is pushed before Resume Snapshot/Next Action/Blockers,
+      // so it is no longer the tail of the whole context. Locate the block by
+      // its own start ("Checkpoint drift") and end (the next block's header,
+      // "Resume Snapshot:", which progressDoc always emits) and assert the
+      // closing instruction lands at the tail of THAT slice. This survives
+      // future blocks being appended or reordered around it.
+      const driftStart = context.indexOf("Checkpoint drift");
+      expect(driftStart).toBeGreaterThanOrEqual(0);
+      const driftEnd = context.indexOf("\n\nResume Snapshot:", driftStart);
+      expect(driftEnd).toBeGreaterThan(driftStart);
+      const driftBlock = context.slice(driftStart, driftEnd);
+      expect(driftBlock.trimEnd().endsWith("Verify Next Action still applies before acting.")).toBe(true);
+      expect(driftBlock).toContain("more)");
       // boundedContext appends "[truncated]" when it cuts a string. renderDrift
       // self-bounds to MAX_DRIFT_LENGTH, so wrapping its output in
       // boundedContext(drift, 400) is a silent no-op that no other assertion
       // here can detect. Asserting the marker's absence is what actually
       // proves the drift block reached the agent whole.
-      expect(context).not.toContain("[truncated]");
+      expect(driftBlock).not.toContain("[truncated]");
+    });
+  });
+
+  it("orders drift before resume state and gates after", async () => {
+    await withTrackerHome(async () => {
+      const dir = await makeRepo();
+      await writeProgress(dir, progressDoc({ project: "Combined" }));
+      const base = await commitAll(dir, "init");
+
+      await fs.writeFile(path.join(dir, "src.txt"), "one", "utf-8");
+      await commitAll(dir, "one");
+
+      await writeProgress(
+        dir,
+        progressDoc({
+          project: "Combined",
+          base_commit: base,
+          gate_implementation: "done",
+          gate_tests: "failing"
+        })
+      );
+
+      const result = await handleSessionStart({ cwd: dir, session_id: `s-combined-${Date.now()}` });
+
+      const context = JSON.parse(result.stdout!).hookSpecificOutput.additionalContext;
+      expect(context).toContain("Checkpoint drift");
+      expect(context).toContain("Gates at checkpoint: tests=failing");
+      expect(context).not.toContain("implementation=");
+
+      const driftIndex = context.indexOf("Checkpoint drift");
+      const gatesIndex = context.indexOf("Gates at checkpoint:");
+      const resumeIndex = context.indexOf("Resume Snapshot:");
+      expect(driftIndex).toBeGreaterThanOrEqual(0);
+      // Regression guard for the ordering change: drift must precede both the
+      // resume state (so the agent is warned before absorbing possibly-stale
+      // state) and the trailing gates summary.
+      expect(resumeIndex).toBeGreaterThan(driftIndex);
+      expect(gatesIndex).toBeGreaterThan(driftIndex);
     });
   });
 });
