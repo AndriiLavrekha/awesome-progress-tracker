@@ -5,7 +5,7 @@ status: in_progress
 path: C:/Users/nkinc/Documents/progress-tracker
 agent_last_used: claude
 updated: 2026-08-19
-last_milestone: Plan C complete: content-hash write guard, mergeable conflicts, per-path write serialization
+last_milestone: Plans A-D complete, stale project-path resolution fixed, dist rebuilt
 deployed: true
 deployment_url: https://github.com/AndriiLavrekha/awesome-progress-tracker/releases/tag/v0.2.3
 sensitivity: normal
@@ -16,16 +16,13 @@ commit_progress: true
 
 ## Resume Snapshot
 
-Plan C (concurrency hardening) shipped on `feat/resume-hardening`, 5 commits `d095d23`..`795dc8a`. Suite 241 -> 250 passing; typecheck and build green.
+All four plans (A checkpoint validation, B session handoff, C concurrency hardening, D resumability benchmark) are complete on `feat/resume-hardening`, 27 of 27 tasks. Suite 283 passing across 20 files; typecheck, build, and bench:build all green. Nothing released: the branch is unmerged and untagged.
 
-`writeFileAtomic` now takes `expectedHash: string` instead of `expectedMtimeMs: number`, compares a SHA-256 of the file's full content, and throws a typed `ProgressConflictError` carrying `filePath`. All five call sites migrated in one commit: three MCP handlers in `src/mcp/server.ts`, plus `bestEffortMarkHandoff` and `bestEffortRecordSessionEnd` in `src/hook/cc-adapter.ts`. The two hook writers keep swallowing the throw, which stays correct: losing a stamp is the right outcome when another writer's content is newer.
+Plan D added `bench/`, compiled through its own `bench/tsconfig.json` and absent from `package.json`'s `files`, so nothing benchmark-related ships. `bench/harness/` holds four modules plus a CLI: `scenario.ts` (expectations schema and loader), `transcript.ts` (normalized JSONL parsing, fails loudly on a bad line rather than silently scoring zero), `score.ts` (pure function over parsed events, three metrics), `setup.ts` (git-bundle materialization under named conditions). `npm run bench -- setup <id> [--condition tracker|baseline|<name>]` prints a temp directory and the prompt; `npm run bench -- score <id> <transcript.jsonl>` grades it. The harness never launches an agent.
 
-Two deviations from the plan text, both recorded in ADR 0020.
+One deviation from the plan text, recorded in ADR 0021: `materialize` pins `core.autocrlf=false` and `core.eol=lf` on the clone. The Task 5 byte-exactness test failed on this machine because the global Windows default rewrote line endings at checkout, which would have made every score depend on the platform that produced it.
 
-1. `conflictResult` does NOT route through `textResult` as the plan specified. `textResult` collapses any payload with a string `error` into `errorResult("invalid_request", ...)`, which would have discarded `currentContent` and `currentFrontmatter` - the whole point of the payload. It builds the MCP result directly, with `isError` still set.
-2. The Task 4 interleaved test failed as written, and the failure was real. The hash closed mtime's resolution window but not the check-then-act window: compare and rename are separated by awaits, so two concurrent in-process writers both passed the compare and the second clobbered the first. Fixed by serializing writes per resolved path with a promise chain (`enqueueWrite` in `src/mcp/writer.ts`). It is a queue, not a lease: no TTL, no renewal, no steal path, cannot outlive its process. Cross-process writers are still ordered only by the compare, so their race is narrowed to the rename rather than closed.
-
-Also: `update_project_progress` appends to `Archive.md` only after the guarded write lands, so a lost race can no longer archive `Done` entries that were never removed from `Progress.md`.
+Scenario `01-interrupted-refactor` is in place and verified end to end under both built-in conditions. `bench/RESULTS.md` has the methodology and an empty results table: no benchmark runs have been performed yet.
 
 ## Current State
 
@@ -53,7 +50,9 @@ Bug injection is now standard practice for any test claiming to guard an invaria
 
 ## Next Action
 
-Execute plan D, `docs/superpowers/plans/2026-08-19-benchmark.md` (7 tasks). Plan C is complete; plans A, B, and C are all shipped on `feat/resume-hardening` and still unreleased.
+Run the benchmark. `npm run bench -- setup 01-interrupted-refactor --condition baseline` and `--condition tracker`, run an agent in each printed directory with the printed prompt, save normalized JSONL transcripts, score both, and paste the numbers into the results table in `bench/RESULTS.md`. Per the fixture-honesty rule in that file, if the two conditions score the same, the scenario is not measuring resumption and gets rewritten rather than reported.
+
+Then decide how to land `feat/resume-hardening`: it carries plans A through D plus ADRs 0016 through 0022, all unreleased and unmerged.
 
 ## Remaining Work
 
@@ -135,9 +134,11 @@ Execute plan D, `docs/superpowers/plans/2026-08-19-benchmark.md` (7 tasks). Plan
 
 ## Blockers
 
-None blocking plan D.
+None.
 
-One tracker bug found while updating this file: this Progress.md's frontmatter `path` still reads `C:/Users/nkinc/Documents/progress-tracker`, the repo's old location. The MCP selector therefore refuses `progress-tracker` as ambiguous and lists the SAME stale path twice, and the real path `D:/depot/awesome-progress-tracker` resolves to "project not found". Two defects behind it: the index admits duplicate entries for one path, and nothing reconciles `path` when a project moves. This section was written by editing the file directly.
+The stale-path bug is FIXED (ADR 0022, commit `d01f49a`). `parseProjectSummary` now derives a project's directory from where its `Progress.md` actually is, and the ambiguity message lists `progressPath` rather than the shared project directory. Verified against a throwaway index over `D:/depot`: every entry carries its own directory and `resolveProject("D:/depot/awesome-progress-tracker")` resolves.
+
+The user's real index at `~/.awesome-progress-tracker/projects.json` has NOT been touched. It still holds two `progress-tracker` entries under the old `C:/Users/nkinc/Documents/progress-tracker` location, one of them a worktree whose `Progress.md` no longer exists. Running `refresh_projects` prunes the dead entry and re-derives the rest. This repo will not appear in that index until `PROJECT_PROGRESS_ROOTS` includes `D:/depot`, which is user configuration, not a code defect.
 
 ## Deployment
 
