@@ -10,6 +10,7 @@ import {
   projectSelectorSchema,
   projectsJson,
   progressSectionSchema,
+  gateFrontmatterUpdates,
   refreshProjectsJson,
   resolveProject,
   rootsFromEnv,
@@ -91,7 +92,8 @@ describe("MCP server tools", () => {
       "refresh_projects",
       "read_project_progress",
       "update_project_progress",
-      "mark_project_status"
+      "mark_project_status",
+      "set_project_gates"
     ]);
   });
 
@@ -249,4 +251,30 @@ describe("MCP server tools", () => {
     expect(packageJson.scripts.mcp).toBe("node dist/src/mcp/server.js");
   });
 
+});
+
+describe("set_project_gates", () => {
+  it("is registered in the tool list", () => {
+    expect(toolDefinitions.map((tool) => tool.name)).toContain("set_project_gates");
+  });
+});
+
+describe("gateFrontmatterUpdates", () => {
+  it("maps only supplied gates to prefixed frontmatter keys", () => {
+    expect(gateFrontmatterUpdates({ tests: "failing", deploy: "not-started" })).toEqual([
+      ["gate_tests", "failing"],
+      ["gate_deploy", "not-started"]
+    ]);
+  });
+
+  it("returns an empty list when no gates are supplied", () => {
+    expect(gateFrontmatterUpdates({})).toEqual([]);
+  });
+
+  it("preserves canonical key order regardless of input order", () => {
+    expect(gateFrontmatterUpdates({ deploy: "done", implementation: "done" })).toEqual([
+      ["gate_implementation", "done"],
+      ["gate_deploy", "done"]
+    ]);
+  });
 });

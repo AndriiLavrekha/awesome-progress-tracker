@@ -24,6 +24,7 @@ import {
 import type { ProjectSummary } from "./schema.js";
 import { listProjectTrackingStates, resetProjectTrackingState } from "../project-state.js";
 import type { ProjectStateOptions } from "../project-state.js";
+import { ALLOWED_GATE_VALUES } from "../hook/schema.js";
 
 const DEFAULT_EXCLUDES = DEFAULT_DISCOVERY_EXCLUDES;
 const PROJECT_STATUSES = ["idea", "active", "blocked", "paused", "done", "deployed", "archived"] as const;
@@ -35,6 +36,24 @@ export const projectSelectorSchema = z.string().trim().min(1).max(DEFAULT_MAX_ST
 export const progressSectionSchema = z.enum(ALLOWED_PROGRESS_SECTIONS);
 export const sectionContentSchema = z.string().max(MAX_SECTION_CONTENT_LENGTH);
 export const lastMilestoneSchema = z.string().trim().min(1).max(MAX_LAST_MILESTONE_LENGTH);
+
+const GATE_FIELDS = ["implementation", "tests", "review", "deploy"] as const;
+
+export const gateValueSchema = z.enum(ALLOWED_GATE_VALUES);
+
+export type GateInput = Partial<Record<(typeof GATE_FIELDS)[number], string>>;
+
+// Emits [frontmatterKey, value] pairs for supplied gates only, in a fixed
+// order so writes are deterministic regardless of argument order.
+export function gateFrontmatterUpdates(gates: GateInput): Array<[string, string]> {
+  const updates: Array<[string, string]> = [];
+  for (const field of GATE_FIELDS) {
+    const value = gates[field];
+    if (value === undefined) continue;
+    updates.push([`gate_${field}`, value]);
+  }
+  return updates;
+}
 
 export interface BoundProjectSummaryOptions {
   maxProjects?: number;
@@ -65,7 +84,8 @@ export const toolDefinitions = [
   { name: "refresh_projects" },
   { name: "read_project_progress" },
   { name: "update_project_progress" },
-  { name: "mark_project_status" }
+  { name: "mark_project_status" },
+  { name: "set_project_gates" }
 ] as const;
 
 export function rootsFromEnv(value = process.env.PROJECT_PROGRESS_ROOTS): string[] {
@@ -357,6 +377,50 @@ export function createServer(): McpServer {
       await upsertIndexedProject(parseProjectSummary(updated, match.progressPath));
 
       return textResult(JSON.stringify({ updated: true, project, status, progressPath: match.progressPath }));
+    }
+  );
+
+  server.registerTool(
+    "set_project_gates",
+    {
+      description:
+        "Set verification gates (implementation, tests, review, deploy) in a project's Progress.md frontmatter. Only supplied gates are written.",
+      inputSchema: {
+        project: projectSelectorSchema,
+        implementation: gateValueSchema.optional(),
+        tests: gateValueSchema.optional(),
+        review: gateValueSchema.optional(),
+        deploy: gateValueSchema.optional()
+      }
+    },
+    async ({ project, implementation, tests, review, deploy }) => {
+      const updates = gateFrontmatterUpdates({ implementation, tests, review, deploy });
+      if (updates.length === 0) {
+        return textResult(JSON.stringify({ error: "at least one gate must be supplied" }));
+      }
+
+      const resolution = await resolveProject(project);
+      if (resolution.error) return textResult(JSON.stringify({ error: resolution.error }));
+      const match = resolution.project!;
+
+      const fileState = await fs.stat(match.progressPath);
+      const markdown = await fs.readFile(match.progressPath, "utf-8");
+
+      let updated = markdown;
+      for (const [key, value] of updates) {
+        updated = replaceFrontmatterValue(updated, key, value);
+      }
+
+      await writeFileAtomic(match.progressPath, updated, fileState.mtimeMs);
+
+      return textResult(
+        JSON.stringify({
+          updated: true,
+          project,
+          gates: Object.fromEntries(updates),
+          progressPath: match.progressPath
+        })
+      );
     }
   );
 
