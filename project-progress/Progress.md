@@ -3,9 +3,9 @@ project: progress-tracker
 progress_schema_version: 1
 status: in_progress
 path: C:/Users/nkinc/Documents/progress-tracker
-agent_last_used: codex
-updated: 2026-08-18
-last_milestone: Fold/archive (ADR 0016) and fail-closed Stop gate (ADR 0017) implemented, unreleased
+agent_last_used: claude
+updated: 2026-08-19
+last_milestone: Wrote four resume-hardening specs and four implementation plans on feat/resume-hardening
 deployed: true
 deployment_url: https://github.com/AndriiLavrekha/awesome-progress-tracker/releases/tag/v0.2.3
 sensitivity: normal
@@ -39,11 +39,17 @@ The approved direction is skill-first and project-local:
 
 ## Last Session
 
-The user asked whether unbounded `Progress.md` growth was a real problem and for mitigation options; picked "replace-don't-append + auto-fold" (ADR 0016), which was planned and implemented. While testing it, the user hit the Stop hook's stale-progress warning and asked whether it was a bug; it wasn't — it's an advisory-only message with no enforcement. The user asked to fix that gap by making it fail-closed (ADR 0017), which was researched (confirmed Claude Code's exit-2 Stop-block contract, found Codex's undocumented) and implemented with a Codex-safe soft fallback.
+Ran the full brainstorm/spec/plan workflow for the resume-hardening roadmap on a new `feat/resume-hardening` branch. No production code changed yet.
+
+Design decisions settled by the user: gates encode as flat `gate_*` frontmatter keys (the parser at `src/mcp/markdown.ts:29` is a flat scalar scanner, so a nested map would corrupt frontmatter); the Stop hook stamps checkpoints automatically; drift reports but never blocks; gate keys and values are both a fixed vocabulary; handoff lives in frontmatter, not machine-local session state; freshness moves to body hashing; conflicts return the current section content; the benchmark is an in-repo harness with human-driven runs.
+
+Two findings changed the plan mid-flight. Optimistic concurrency already exists — `writeFileAtomic` compares mtime — so ADR 0020 hardens it rather than building it. More seriously, SessionStart writing frontmatter would defeat the mtime-based freshness check and silently disable the ADR 0017 Stop gate; that forced the body-hash redesign and a matching change to `gitHasChanges`, which must now ignore `project-progress/` or every read-only session gets nagged.
+
+Committed `69d34f3` (four specs) and `5d2f177` (four plans, 132 TDD steps).
 
 ## Next Action
 
-Commit and release the Progress.md fold/archive fix (ADR 0016) and the fail-closed Stop gate (ADR 0017). Manually verify Codex's exit-code-2 Stop-hook behavior so `hooks-codex.json` can move off `stop-soft` onto the hard-blocking `stop` subcommand. Separately, prepare the Hermes release/versioning decision and publish when approved; native Hermes lifecycle hooks remain a separate follow-up.
+Implement plan A, `docs/superpowers/plans/2026-08-19-checkpoint-validation.md`, task by task on `feat/resume-hardening`. Then B, C, D in that order; each plan names its cross-plan seams. The pending ADR 0016/0017 release on `main` is still unreleased and independent of this branch.
 
 ## Remaining Work
 
@@ -81,6 +87,14 @@ Commit and release the Progress.md fold/archive fix (ADR 0016) and the fail-clos
 - [ ] Decide Hermes release/versioning and publish the next release.
 - [ ] Manually verify Codex Stop-hook exit-code-2 behavior, then promote `hooks-codex.json` from `stop-soft` to `stop`.
 - [ ] Commit and release ADR 0016 (fold/archive) and ADR 0017 (fail-closed Stop gate).
+- [x] Brainstorm the resume-hardening roadmap and write four design specs.
+- [x] Write four task-by-task implementation plans from those specs.
+- [ ] Implement plan A: checkpoint validation and verification gates (ADR 0018).
+- [ ] Implement plan B: session handoff and body-hash freshness (ADR 0019).
+- [ ] Implement plan C: content-hash write guard and mergeable conflicts (ADR 0020).
+- [ ] Implement plan D: resumability benchmark harness and first fixture (ADR 0021).
+- [ ] Document git + `Session Log.md` as the existing checkpoint-history answer in README (rejects a separate journal).
+- [ ] Fix the stale `path:` frontmatter value — it points at `C:/Users/nkinc/Documents/progress-tracker` but this repo is checked out at `D:/depot/awesome-progress-tracker`.
 
 ## Done
 
@@ -110,11 +124,12 @@ Commit and release the Progress.md fold/archive fix (ADR 0016) and the fail-clos
 - [x] Added Hermes-specific CLI output and rejected unsupported project-local Hermes MCP semantics.
 - [x] Added `Done`-section auto-fold to `Archive.md` in `update_project_progress`, capped at `FOLD_THRESHOLD` (ADR 0016).
 - [x] Clarified in SKILL.md that `Resume Snapshot`/`Last Session` are replace-wholesale fields, not append targets.
+- [x] Wrote four resume-hardening specs and four implementation plans on `feat/resume-hardening`.
 - [x] Made the Stop hook fail-closed on Claude Code (exit 2, once per session via `stopBlocked`), kept Codex on soft-only `stop-soft` until verified (ADR 0017).
 
 ## Blockers
 
-None. ADR 0015 defines Hermes compatibility as Skill + MCP with lifecycle hooks deferred.
+None. Specs and plans are committed on `feat/resume-hardening`; implementation has not started. The pending ADR 0016/0017 release on `main` is independent and still unreleased. ADR 0015 defines Hermes compatibility as Skill + MCP with lifecycle hooks deferred.
 
 ## Deployment
 
