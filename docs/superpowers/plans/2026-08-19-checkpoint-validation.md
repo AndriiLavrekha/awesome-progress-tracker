@@ -790,6 +790,12 @@ git commit -m "feat: render checkpoint drift and gate summaries"
 
 ## Task 5: Stamp checkpoints from the Stop hook
 
+> **Amended after the Task 4 review.** Rendering was split out of
+> `src/hook/checkpoint.ts` into `src/hook/checkpoint-render.ts`, which has no
+> git dependency. `readCheckpoint`, `resolveDrift`, and `defaultGitRunner`
+> still come from `./checkpoint.js`; `renderDrift` and `renderGates` now come
+> from `./checkpoint-render.js`.
+
 **Files:**
 - Modify: `src/hook/cc-adapter.ts` (private `git` helper, imports, `handleStop`)
 - Test: `tests/plugin/cc-adapter.test.ts` (append a new `describe` block)
@@ -900,13 +906,8 @@ function git(cwd: string, args: string[]): string | null {
 Add to the imports at the top of the file:
 
 ```ts
-import {
-  defaultGitRunner as git,
-  readCheckpoint,
-  renderDrift,
-  renderGates,
-  resolveDrift
-} from "./checkpoint.js";
+import { defaultGitRunner as git, readCheckpoint, resolveDrift } from "./checkpoint.js";
+import { renderDrift, renderGates } from "./checkpoint-render.js";
 import { replaceFrontmatterValue } from "../mcp/writer.js";
 ```
 
