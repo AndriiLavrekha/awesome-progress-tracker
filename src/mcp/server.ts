@@ -24,7 +24,7 @@ import {
 import type { ProjectSummary } from "./schema.js";
 import { listProjectTrackingStates, resetProjectTrackingState } from "../project-state.js";
 import type { ProjectStateOptions } from "../project-state.js";
-import { ALLOWED_GATE_VALUES } from "../hook/schema.js";
+import { ALLOWED_GATE_VALUES, GATE_KEYS } from "../hook/schema.js";
 
 const DEFAULT_EXCLUDES = DEFAULT_DISCOVERY_EXCLUDES;
 const PROJECT_STATUSES = ["idea", "active", "blocked", "paused", "done", "deployed", "archived"] as const;
@@ -37,11 +37,15 @@ export const progressSectionSchema = z.enum(ALLOWED_PROGRESS_SECTIONS);
 export const sectionContentSchema = z.string().max(MAX_SECTION_CONTENT_LENGTH);
 export const lastMilestoneSchema = z.string().trim().min(1).max(MAX_LAST_MILESTONE_LENGTH);
 
-const GATE_FIELDS = ["implementation", "tests", "review", "deploy"] as const;
+type StripGatePrefix<T extends string> = T extends `gate_${infer Rest}` ? Rest : never;
+type GateField = StripGatePrefix<(typeof GATE_KEYS)[number]>;
+
+// Derived from GATE_KEYS so a new gate cannot be readable but unwritable.
+const GATE_FIELDS = GATE_KEYS.map((key) => key.slice("gate_".length)) as readonly GateField[];
 
 export const gateValueSchema = z.enum(ALLOWED_GATE_VALUES);
 
-export type GateInput = Partial<Record<(typeof GATE_FIELDS)[number], string>>;
+export type GateInput = Partial<Record<GateField, string>>;
 
 // Emits [frontmatterKey, value] pairs for supplied gates only, in a fixed
 // order so writes are deterministic regardless of argument order.

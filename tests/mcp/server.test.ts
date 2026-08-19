@@ -337,4 +337,33 @@ describe("gateFrontmatterUpdates", () => {
     expect(updated).toContain("## Next Action");
     expect(updated).toContain("Do the thing.");
   });
+
+  it("inserts gates into a document that has none", () => {
+    const doc = [
+      "---",
+      "project: Demo",
+      "status: active",
+      "---",
+      "",
+      "## Next Action",
+      "",
+      "Do the thing.",
+      ""
+    ].join("\n");
+
+    let updated = doc;
+    for (const [key, value] of gateFrontmatterUpdates({ implementation: "done", tests: "failing" })) {
+      updated = replaceFrontmatterValue(updated, key, value);
+    }
+
+    // Key order after insert is not part of the contract — readers go
+    // through GATE_KEYS and are order-independent — so we assert on
+    // parsed values, not on line order.
+    const frontmatter = parseFrontmatter(updated);
+    expect(frontmatter.gate_implementation).toBe("done");
+    expect(frontmatter.gate_tests).toBe("failing");
+    expect(frontmatter.project).toBe("Demo");
+    expect(frontmatter.status).toBe("active");
+    expect(updated).toContain("## Next Action");
+  });
 });
