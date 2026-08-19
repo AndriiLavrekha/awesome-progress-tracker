@@ -15,6 +15,22 @@ depend on the platform that produced it.
 The agent is given only the scenario prompt, which never names the task. The
 run is recorded as a normalized JSONL transcript and scored offline, so a
 disputed number can be recomputed by anyone holding the same file.
+`npm run bench -- normalize <session.jsonl> <transcript.jsonl>` produces that
+file from a Claude Code session transcript, so token counts are the run's real
+billed usage rather than a hand-written estimate.
+
+A step's token count is `input_tokens + cache_creation_input_tokens +
+output_tokens`. Cache reads are excluded: they are dominated by the unchanged
+system prompt being re-read every turn, which says nothing about how well the
+agent resumed. Thinking tokens are counted, because they were spent, but
+thinking content is never emitted as an action and so cannot satisfy a
+`correctNextAction` matcher. Where one assistant message produces several
+events, its tokens are charged to the first, so `tokens-to-correct` includes
+the whole message that contained the correct action.
+
+The agent driven for a run must not have seen the fixture or its
+`expected.json`. An agent that helped build the harness knows the answer key,
+and its score measures recall rather than resumption.
 
 Three metrics are reported. `tokens-to-correct` is cumulative tokens through
 the first action matching the scenario's `correctNextAction` matchers, or
