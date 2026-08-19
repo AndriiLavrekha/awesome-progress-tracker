@@ -103,13 +103,25 @@ function stringValue(value) {
 function booleanValue(value) {
     return value === true;
 }
+// A project's directory is where its Progress.md actually lives. The
+// frontmatter `path` key is written once at init and never reconciled, so it
+// goes stale the moment the project is moved or cloned elsewhere, and a stale
+// value makes the MCP selector match the wrong project or none at all.
+// Discovery always finds Progress.md at <projectDir>/project-progress/, so the
+// directory is the path minus its last two segments.
+function projectDirectoryFrom(progressPath) {
+    const segments = progressPath.replace(/\\/g, "/").replace(/\/+$/, "").split("/");
+    return segments.length < 3 ? "" : segments.slice(0, -2).join("/");
+}
 export function parseProjectSummary(markdown, progressPath = "") {
     const frontmatter = parseFrontmatter(markdown);
     return {
         progressPath,
         project: stringValue(frontmatter.project),
         status: stringValue(frontmatter.status || "active"),
-        path: stringValue(frontmatter.path),
+        // Frontmatter is only a fallback, for a summary parsed without a known
+        // location on disk.
+        path: projectDirectoryFrom(progressPath) || stringValue(frontmatter.path),
         updated: stringValue(frontmatter.updated),
         lastMilestone: stringValue(frontmatter.last_milestone),
         deployed: booleanValue(frontmatter.deployed),

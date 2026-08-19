@@ -1,10 +1,14 @@
 import { promises as fs } from "node:fs";
-import { execFileSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { bodyHash, sha256 } from "../hash.js";
 import { extractSection, parseFrontmatter } from "../mcp/markdown.js";
+import { replaceFrontmatterValue, writeFileAtomic } from "../mcp/writer.js";
 import { readProjectTrackingState, setProjectTrackingState } from "../project-state.js";
+// defaultGitRunner's implementation lives in checkpoint.ts, not here.
+import { defaultGitRunner as git, readCheckpoint, resolveDrift } from "./checkpoint.js";
+import { renderDrift, renderGates } from "./checkpoint-render.js";
 import { checkFreshness } from "./freshness.js";
 import { validateProgressFile } from "./validator.js";
 function progressPathFor(cwd) {
@@ -51,10 +55,16 @@ async function recordSessionStart(sessionId, cwd) {
         // best effort only
     }
 }
-async function readSessionStartMs(sessionId) {
-    const state = await readSessionState(sessionId);
-    const ms = state.startedAt ? Date.parse(state.startedAt) : NaN;
-    return Number.isNaN(ms) ? null : ms;
+async function bestEffortRecordBodyHash(sessionId, markdown) {
+    if (!sessionId)
+        return;
+    try {
+        const state = await readSessionState(sessionId);
+        await writeSessionState(sessionId, { ...state, bodyHash: bodyHash(markdown) });
+    }
+    catch {
+        // best effort only
+    }
 }
 async function bestEffortSetProjectState(cwd, state) {
     try {
@@ -72,17 +82,80 @@ async function bestEffortReadProjectState(cwd) {
         return "unknown";
     }
 }
-function git(cwd, args) {
+async function bestEffortMarkHandoff(progressPath, handoff, sessionId) {
     try {
-        return execFileSync("git", args, { cwd, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] });
+        const markdown = await fs.readFile(progressPath, "utf-8");
+        const expectedHash = sha256(markdown);
+        let updated = replaceFrontmatterValue(markdown, "handoff", handoff);
+        if (sessionId)
+            updated = replaceFrontmatterValue(updated, "session_id", sessionId);
+        await writeFileAtomic(progressPath, updated, expectedHash);
+        return true;
     }
     catch {
-        return null;
+        // Best effort only: a handoff write must never fail a session.
+        return false;
     }
 }
+async function bestEffortRecordSessionEnd(cwd, progressPath, now = new Date()) {
+    try {
+        const markdown = await fs.readFile(progressPath, "utf-8");
+        const expectedHash = sha256(markdown);
+        let updated = replaceFrontmatterValue(markdown, "handoff", "clean");
+        const fields = readCheckpoint(cwd, now);
+        if (fields) {
+            updated = replaceFrontmatterValue(updated, "base_commit", fields.base_commit);
+            updated = replaceFrontmatterValue(updated, "base_branch", fields.base_branch);
+            updated = replaceFrontmatterValue(updated, "worktree_dirty", String(fields.worktree_dirty));
+            updated = replaceFrontmatterValue(updated, "checkpoint_at", fields.checkpoint_at);
+        }
+        // writeFileAtomic throws "Progress file changed on disk" when another
+        // writer (e.g. an MCP update_project_progress call) raced us and won.
+        // That is the correct outcome to swallow: their content is newer and
+        // must not be clobbered by our stamp.
+        await writeFileAtomic(progressPath, updated, expectedHash);
+        return true;
+    }
+    catch {
+        // Best effort only: a recording failure must never fail a session.
+        return false;
+    }
+}
+// A porcelain line is "XY path", or "XY orig -> path" for a rename. The two
+// status columns are fixed-width, so the path starts at index 2.
+//
+// Returns a normalized classification KEY for a porcelain line, not a usable
+// filesystem path. Git quotes and octal-escapes paths containing non-ASCII or
+// special bytes; this deliberately does not unescape them, because the only
+// consumer is an ASCII prefix test that is unaffected by escaped tails. Do not
+// use this value to open a file.
+function porcelainPathKey(line) {
+    const rest = line.slice(2).trim();
+    const arrow = rest.indexOf(" -> ");
+    const target = arrow === -1 ? rest : rest.slice(arrow + 4);
+    const unquoted = target.replace(/^"|"$/g, "");
+    // Only normalize separators on unquoted paths. A quoted path may contain
+    // backslash escape sequences that are not separators.
+    return unquoted === target ? unquoted.replace(/\\/g, "/") : unquoted;
+}
+function isProgressPath(line) {
+    const target = porcelainPathKey(line);
+    return target.startsWith("project-progress/") || target.includes("/project-progress/");
+}
+// SessionStart and checkpoint stamping now write Progress.md, so a dirty
+// progress folder is no longer evidence that the agent did any work. Only
+// changes elsewhere count.
 function gitHasChanges(cwd) {
-    const out = git(cwd, ["status", "--porcelain"]);
-    return out !== null && out.trim().length > 0;
+    // --untracked-files=all keeps git from collapsing a wholly-untracked
+    // directory to a single "?? dir/" line, which would hide a nested
+    // project-progress/ folder inside another untracked directory.
+    const out = git(cwd, ["status", "--porcelain", "--untracked-files=all"]);
+    if (out === null)
+        return false;
+    return out
+        .split(/\r?\n/)
+        .filter((line) => line.trim().length > 0)
+        .some((line) => !isProgressPath(line));
 }
 function stagedFiles(cwd) {
     const out = git(cwd, ["diff", "--cached", "--name-only"]);
@@ -133,6 +206,7 @@ export async function handleSessionStart(event) {
     }
     await bestEffortSetProjectState(cwd, "initialized");
     const markdown = await fs.readFile(progressPath, "utf-8");
+    await bestEffortRecordBodyHash(event.session_id, markdown);
     const frontmatter = parseFrontmatter(markdown);
     const lines = [
         "This project uses Awesome Progress Tracker. `project-progress/Progress.md` is the canonical " +
@@ -140,6 +214,27 @@ export async function handleSessionStart(event) {
             "Next Action, Blockers) before finishing meaningful work.",
         `Project: ${frontmatter.project ?? "(unknown)"} | Status: ${frontmatter.status ?? "?"} | Updated: ${frontmatter.updated ?? "?"}`
     ];
+    // Drift is pushed before Resume Snapshot/Next Action/Blockers so the agent
+    // is warned that the recorded state may be stale before it absorbs that
+    // state, not after.
+    const baseCommit = typeof frontmatter.base_commit === "string" ? frontmatter.base_commit : "";
+    if (baseCommit) {
+        const status = resolveDrift(cwd, baseCommit);
+        if (status) {
+            // renderDrift is self-bounding to MAX_DRIFT_LENGTH: it trims its own file
+            // list to fit and never sheds prose. Do NOT wrap it in boundedContext —
+            // that truncates from the end, which would cut the closing instruction
+            // and keep the file names, exactly backwards.
+            const drift = renderDrift(status, baseCommit);
+            if (drift)
+                lines.push(`\n${drift}`);
+        }
+    }
+    if (frontmatter.handoff === "interrupted") {
+        const previous = frontmatter.session_id ? String(frontmatter.session_id) : "(unknown)";
+        lines.push(`\nPrevious session ${previous} ended without a clean handoff. ` +
+            "Progress.md may predate uncommitted work in the tree.");
+    }
     const resume = extractSection(markdown, "Resume Snapshot");
     const next = extractSection(markdown, "Next Action");
     const blockers = extractSection(markdown, "Blockers");
@@ -150,6 +245,10 @@ export async function handleSessionStart(event) {
     if (blockers && blockers.trim() && blockers.trim().toLowerCase() !== "none.") {
         lines.push(`\nBlockers:\n${boundedContext(blockers, 200)}`);
     }
+    const gates = renderGates(frontmatter);
+    if (gates)
+        lines.push(`\n${gates}`);
+    await bestEffortMarkHandoff(progressPath, "interrupted", event.session_id);
     return {
         code: 0,
         stdout: emitJson({
@@ -226,13 +325,15 @@ export async function handleStop(event, options = {}) {
         return { code: 0 };
     const warnings = [];
     let stale = true;
-    const startedAt = await readSessionStartMs(event.session_id);
-    if (startedAt !== null) {
+    const sessionState = await readSessionState(event.session_id);
+    const startedAt = sessionState.startedAt ? Date.parse(sessionState.startedAt) : NaN;
+    if (Number.isFinite(startedAt)) {
         try {
             const freshness = await checkFreshness(progressPath, {
                 meaningfulWorkHappened: true,
                 sessionStartedAt: new Date(startedAt),
-                completionBoundary: true
+                completionBoundary: true,
+                sessionBodyHash: sessionState.bodyHash
             });
             stale = !freshness.isFresh;
         }
@@ -243,6 +344,14 @@ export async function handleStop(event, options = {}) {
     if (stale) {
         warnings.push("project-progress/Progress.md was not updated this session. If you did meaningful work, " +
             "update Resume Snapshot, Next Action, and Blockers before finishing.");
+    }
+    if (!stale) {
+        // Only stamp when the agent actually updated Progress.md this session.
+        // Stamping an unchanged file would assert a verification that never happened.
+        const recorded = await bestEffortRecordSessionEnd(cwd, progressPath);
+        if (!recorded) {
+            warnings.push("Checkpoint and handoff were not recorded; drift detection may be unavailable next session.");
+        }
     }
     try {
         const secretErrors = (await validateProgressFile(progressPath)).filter((error) => error.includes("secret-like"));

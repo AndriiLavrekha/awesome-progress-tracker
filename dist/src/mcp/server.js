@@ -5,10 +5,12 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import * as z from "zod/v4";
 import { DEFAULT_DISCOVERY_EXCLUDES, discoverProjects } from "./discovery.js";
 import { readProjectIndex, refreshProjectIndex, upsertIndexedProject } from "./index.js";
-import { parseProjectSummary } from "./markdown.js";
+import { extractSection, parseFrontmatter, parseProjectSummary } from "./markdown.js";
+import { sha256 } from "../hash.js";
 import path from "node:path";
-import { ALLOWED_PROGRESS_SECTIONS, MAX_LAST_MILESTONE_LENGTH, MAX_SECTION_CONTENT_LENGTH, appendToArchive, foldDoneSection, replaceFrontmatterValue, replaceSectionWithOperation, writeFileAtomic, validateLastMilestone, validateSectionContent, validateSectionName } from "./writer.js";
+import { ALLOWED_PROGRESS_SECTIONS, MAX_LAST_MILESTONE_LENGTH, MAX_SECTION_CONTENT_LENGTH, appendToArchive, foldDoneSection, replaceFrontmatterValue, replaceSectionWithOperation, writeFileAtomic, ProgressConflictError, validateLastMilestone, validateSectionContent, validateSectionName } from "./writer.js";
 import { listProjectTrackingStates, resetProjectTrackingState } from "../project-state.js";
+import { ALLOWED_GATE_VALUES, GATE_KEYS } from "../hook/schema.js";
 const DEFAULT_EXCLUDES = DEFAULT_DISCOVERY_EXCLUDES;
 const PROJECT_STATUSES = ["idea", "active", "blocked", "paused", "done", "deployed", "archived"];
 const DEFAULT_MAX_PROJECTS = 50;
@@ -18,12 +20,28 @@ export const projectSelectorSchema = z.string().trim().min(1).max(DEFAULT_MAX_ST
 export const progressSectionSchema = z.enum(ALLOWED_PROGRESS_SECTIONS);
 export const sectionContentSchema = z.string().max(MAX_SECTION_CONTENT_LENGTH);
 export const lastMilestoneSchema = z.string().trim().min(1).max(MAX_LAST_MILESTONE_LENGTH);
+// Derived from GATE_KEYS so a new gate cannot be readable but unwritable.
+const GATE_FIELDS = GATE_KEYS.map((key) => key.slice("gate_".length));
+export const gateValueSchema = z.enum(ALLOWED_GATE_VALUES);
+// Emits [frontmatterKey, value] pairs for supplied gates only, in a fixed
+// order so writes are deterministic regardless of argument order.
+export function gateFrontmatterUpdates(gates) {
+    const updates = [];
+    for (const field of GATE_FIELDS) {
+        const value = gates[field];
+        if (value === undefined)
+            continue;
+        updates.push([`gate_${field}`, value]);
+    }
+    return updates;
+}
 export const toolDefinitions = [
     { name: "list_projects" },
     { name: "refresh_projects" },
     { name: "read_project_progress" },
     { name: "update_project_progress" },
-    { name: "mark_project_status" }
+    { name: "mark_project_status" },
+    { name: "set_project_gates" }
 ];
 export function rootsFromEnv(value = process.env.PROJECT_PROGRESS_ROOTS) {
     return (value ?? "")
@@ -116,7 +134,10 @@ export async function resolveProject(selector) {
         return { error: "project not found", suggestions };
     }
     if (candidates.length > 1) {
-        const paths = candidates.map((project) => project.path || project.progressPath).join(", ");
+        // The progressPath, not the project directory: a worktree checkout puts a
+        // second Progress.md under one project, so listing directories would print
+        // the same string twice and tell the caller nothing about how to pick one.
+        const paths = candidates.map((project) => project.progressPath || project.path).join(", ");
         return {
             error: `ambiguous project selector "${selector}" matches ${candidates.length} projects: ${paths}. Pass an exact path instead.`
         };
@@ -139,6 +160,40 @@ export async function resetProjectTrackingStateJson(project, options = {}) {
         reset: await resetProjectTrackingState(project, options),
         path: project.replace(/\\/g, "/")
     });
+}
+// Builds the payload a caller needs in order to merge and retry without a
+// second round trip: the current content of the section it tried to write, or
+// the current values of the frontmatter keys it tried to set.
+export function conflictPayload(currentMarkdown, options) {
+    const payload = {
+        error: "conflict",
+        hint: "another writer changed Progress.md; merge with the current values and retry"
+    };
+    if (options.section) {
+        payload.section = options.section;
+        payload.currentContent = extractSection(currentMarkdown, options.section);
+    }
+    if (options.keys && options.keys.length > 0) {
+        const frontmatter = parseFrontmatter(currentMarkdown);
+        payload.currentFrontmatter = Object.fromEntries(options.keys.map((key) => [key, frontmatter[key] ?? null]));
+    }
+    return payload;
+}
+// Deliberately does NOT route through textResult. That helper collapses any
+// payload carrying a string `error` into errorResult("invalid_request", ...),
+// which would discard currentContent and currentFrontmatter — the entire
+// reason the conflict payload exists. The result is built directly so the
+// merge data survives to the caller, while isError still marks the failure.
+async function conflictResult(error, progressPath, options) {
+    if (!(error instanceof ProgressConflictError))
+        throw error;
+    const current = await fs.readFile(progressPath, "utf-8");
+    const payload = conflictPayload(current, options);
+    return {
+        content: [{ type: "text", text: JSON.stringify(payload) }],
+        structuredContent: payload,
+        isError: true
+    };
 }
 export function successResult(structuredContent, text) {
     return {
@@ -216,8 +271,8 @@ export function createServer() {
         if (resolution.error)
             return textResult(JSON.stringify({ error: resolution.error }));
         const match = resolution.project;
-        const fileState = await fs.stat(match.progressPath);
         const markdown = await fs.readFile(match.progressPath, "utf-8");
+        const expectedHash = sha256(markdown);
         let sectionContent = content;
         let archived = [];
         if (section === "Done") {
@@ -227,8 +282,16 @@ export function createServer() {
         }
         const result = replaceSectionWithOperation(markdown, section, sectionContent);
         const updated = result.markdown;
-        await writeFileAtomic(match.progressPath, updated, fileState.mtimeMs);
+        try {
+            await writeFileAtomic(match.progressPath, updated, expectedHash);
+        }
+        catch (error) {
+            return await conflictResult(error, match.progressPath, { section });
+        }
         await upsertIndexedProject(parseProjectSummary(updated, match.progressPath));
+        // Archiving only after the guarded write lands. Folding entries into
+        // Archive.md first would move Done items that were never removed from
+        // Progress.md when the write lost a race.
         if (archived.length > 0) {
             const archivePath = path.join(path.dirname(match.progressPath), "Archive.md");
             const archiveMarkdown = await fs.readFile(archivePath, "utf-8").catch(() => "# Archive\n");
@@ -251,13 +314,59 @@ export function createServer() {
         if (resolution.error)
             return textResult(JSON.stringify({ error: resolution.error }));
         const match = resolution.project;
-        const fileState = await fs.stat(match.progressPath);
         const markdown = await fs.readFile(match.progressPath, "utf-8");
+        const expectedHash = sha256(markdown);
         const withStatus = replaceFrontmatterValue(markdown, "status", status);
         const updated = replaceFrontmatterValue(withStatus, "last_milestone", last_milestone);
-        await writeFileAtomic(match.progressPath, updated, fileState.mtimeMs);
+        try {
+            await writeFileAtomic(match.progressPath, updated, expectedHash);
+        }
+        catch (error) {
+            return await conflictResult(error, match.progressPath, {
+                keys: ["status", "last_milestone"]
+            });
+        }
         await upsertIndexedProject(parseProjectSummary(updated, match.progressPath));
         return textResult(JSON.stringify({ updated: true, project, status, progressPath: match.progressPath }));
+    });
+    server.registerTool("set_project_gates", {
+        description: "Set verification gates (implementation, tests, review, deploy) in a project's Progress.md frontmatter. Only supplied gates are written.",
+        inputSchema: {
+            project: projectSelectorSchema,
+            implementation: gateValueSchema.optional(),
+            tests: gateValueSchema.optional(),
+            review: gateValueSchema.optional(),
+            deploy: gateValueSchema.optional()
+        }
+    }, async ({ project, implementation, tests, review, deploy }) => {
+        const updates = gateFrontmatterUpdates({ implementation, tests, review, deploy });
+        if (updates.length === 0) {
+            return textResult(JSON.stringify({ error: "at least one gate must be supplied" }));
+        }
+        const resolution = await resolveProject(project);
+        if (resolution.error)
+            return textResult(JSON.stringify({ error: resolution.error }));
+        const match = resolution.project;
+        const markdown = await fs.readFile(match.progressPath, "utf-8");
+        const expectedHash = sha256(markdown);
+        let updated = markdown;
+        for (const [key, value] of updates) {
+            updated = replaceFrontmatterValue(updated, key, value);
+        }
+        try {
+            await writeFileAtomic(match.progressPath, updated, expectedHash);
+        }
+        catch (error) {
+            return await conflictResult(error, match.progressPath, {
+                keys: updates.map(([key]) => key)
+            });
+        }
+        return textResult(JSON.stringify({
+            updated: true,
+            project,
+            gates: Object.fromEntries(updates),
+            progressPath: match.progressPath
+        }));
     });
     return server;
 }

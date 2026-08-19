@@ -4,6 +4,17 @@ export const MAX_LAST_MILESTONE_LENGTH = 240;
 export const MAX_SECTION_CONTENT_LENGTH = 4000;
 export const FOLD_THRESHOLD = 2800;
 const ARCHIVE_HEADING = "## Archived Done Items";
+// Thrown when the file changed between the caller's read and its write.
+// Typed rather than a bare Error so callers can distinguish a lost race from a
+// genuine I/O failure and respond with a mergeable payload.
+export class ProgressConflictError extends Error {
+    filePath;
+    constructor(filePath) {
+        super("Progress file changed on disk; reread it before writing.");
+        this.name = "ProgressConflictError";
+        this.filePath = filePath;
+    }
+}
 export const ALLOWED_PROGRESS_SECTIONS = [
     "Resume Snapshot",
     "Current State",
@@ -136,18 +147,48 @@ export function appendToArchive(archiveMarkdown, items) {
     }
     return `${archiveMarkdown.trimEnd()}\n\n${ARCHIVE_HEADING}\n\n${entry}`;
 }
-export async function writeFileAtomic(filePath, content, expectedMtimeMs) {
-    const current = await fs.stat(filePath);
-    if (current.mtimeMs !== expectedMtimeMs)
-        throw new Error("Progress file changed on disk; reread it before writing.");
-    const tempPath = path.join(path.dirname(filePath), `.${path.basename(filePath)}.${process.pid}.${Date.now()}.tmp`);
-    try {
-        await fs.writeFile(tempPath, content, "utf-8");
-        await fs.rename(tempPath, filePath);
-    }
-    finally {
-        await fs.rm(tempPath, { force: true }).catch(() => undefined);
-    }
+// Serializes writes to one path within this process. The hash compare and the
+// rename are separated by awaits, so two concurrent callers holding the same
+// expected hash would both pass the compare and the second would silently
+// clobber the first — the exact overwrite the guard exists to prevent. Queuing
+// makes read-compare-rename atomic per path, so the loser re-reads the winner's
+// content and raises ProgressConflictError.
+//
+// This is a queue, not a lease: it has no TTL, no renewal, and no steal path,
+// and it cannot outlive the process that holds it. Writers in other processes
+// are still ordered only by the compare, which narrows their race to the
+// rename itself rather than closing it.
+const writeQueues = new Map();
+function enqueueWrite(key, task) {
+    const previous = writeQueues.get(key) ?? Promise.resolve();
+    const run = previous.then(task, task);
+    // Keep the chain alive on rejection so a failed write does not poison the
+    // queue, and drop the entry once this write is the last one on it.
+    const settled = run.catch(() => undefined);
+    writeQueues.set(key, settled);
+    void settled.then(() => {
+        if (writeQueues.get(key) === settled)
+            writeQueues.delete(key);
+    });
+    return run;
+}
+export async function writeFileAtomic(filePath, content, expectedHash) {
+    return enqueueWrite(path.resolve(filePath), async () => {
+        // Content hashing has no resolution window. mtime is whole-second on some
+        // network and FAT mounts, so two writes inside one tick compared equal and
+        // the second silently won.
+        const current = await fs.readFile(filePath, "utf-8");
+        if (sha256(current) !== expectedHash)
+            throw new ProgressConflictError(filePath);
+        const tempPath = path.join(path.dirname(filePath), `.${path.basename(filePath)}.${process.pid}.${Date.now()}.tmp`);
+        try {
+            await fs.writeFile(tempPath, content, "utf-8");
+            await fs.rename(tempPath, filePath);
+        }
+        finally {
+            await fs.rm(tempPath, { force: true }).catch(() => undefined);
+        }
+    });
 }
 export function replaceFrontmatterValue(markdown, key, value) {
     const lines = splitLinesWithEndings(markdown);
@@ -178,3 +219,4 @@ export function replaceFrontmatterValue(markdown, key, value) {
 }
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { sha256 } from "../hash.js";
