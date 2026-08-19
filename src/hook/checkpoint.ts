@@ -144,6 +144,7 @@ export function resolveDrift(
 }
 
 export const MAX_DRIFT_FILES = 10;
+export const MAX_DRIFT_LENGTH = 400;
 
 const CLOSING = "Verify Next Action still applies before acting.";
 
@@ -151,16 +152,36 @@ function shortSha(sha: string): string {
   return sha.slice(0, 7);
 }
 
-function renderFiles(files: string[]): string {
+function renderFiles(files: string[], budget: number): string {
   if (files.length === 0) return "";
-  const shown = files.slice(0, MAX_DRIFT_FILES);
-  const extra = files.length - shown.length;
-  const lines = shown.map((file) => `  ${file}`);
+
+  const header = "\nChanged since checkpoint:\n";
+  const lines: string[] = [];
+  let used = header.length;
+
+  for (const file of files.slice(0, MAX_DRIFT_FILES)) {
+    const line = `  ${file}`;
+    // Reserve room for a possible "(+N more)" line so the suffix can never
+    // be the thing that overflows the budget.
+    const reserve = lines.length + 1 < files.length ? 20 : 0;
+    if (used + line.length + 1 + reserve > budget) break;
+    lines.push(line);
+    used += line.length + 1;
+  }
+
+  if (lines.length === 0) return "";
+
+  const extra = files.length - lines.length;
   if (extra > 0) lines.push(`  (+${extra} more)`);
-  return `\nChanged since checkpoint:\n${lines.join("\n")}`;
+
+  return `${header}${lines.join("\n")}`;
 }
 
-export function renderDrift(status: DriftStatus, baseCommit: string): string {
+export function renderDrift(
+  status: DriftStatus,
+  baseCommit: string,
+  maxLength = MAX_DRIFT_LENGTH
+): string {
   const base = shortSha(baseCommit);
 
   switch (status.kind) {
@@ -174,26 +195,28 @@ export function renderDrift(status: DriftStatus, baseCommit: string): string {
       );
     case "ahead": {
       const noun = status.commitsBehind === 1 ? "commit" : "commits";
-      return (
+      const head =
         `Checkpoint drift: stored base_commit ${base} is ${status.commitsBehind} ` +
-        `${noun} behind HEAD ${shortSha(status.head)} (branch ${status.branch}).` +
-        `${renderFiles(status.files)}\n${CLOSING}`
-      );
+        `${noun} behind HEAD ${shortSha(status.head)} (branch ${status.branch}).`;
+      const tail = `\n${CLOSING}`;
+      return `${head}${renderFiles(status.files, maxLength - head.length - tail.length)}${tail}`;
     }
-    case "diverged":
-      return (
+    case "diverged": {
+      const head =
         `Checkpoint drift: stored base_commit ${base} has diverged from HEAD ` +
         `${shortSha(status.head)} (branch ${status.branch}): ` +
-        `${status.onlyOnCheckpoint} on the checkpoint side, ${status.onlyOnHead} on HEAD.` +
-        `${renderFiles(status.files)}\n${CLOSING}`
-      );
+        `${status.onlyOnCheckpoint} on the checkpoint side, ${status.onlyOnHead} on HEAD.`;
+      const tail = `\n${CLOSING}`;
+      return `${head}${renderFiles(status.files, maxLength - head.length - tail.length)}${tail}`;
+    }
     case "behind": {
       const noun = status.onlyOnCheckpoint === 1 ? "commit" : "commits";
-      return (
+      const head =
         `Checkpoint drift: HEAD ${shortSha(status.head)} (branch ${status.branch}) is ` +
         `${status.onlyOnCheckpoint} ${noun} behind the stored checkpoint ${base}, so the ` +
-        `tree was reset backwards past it.${renderFiles(status.files)}\n${CLOSING}`
-      );
+        `tree was reset backwards past it.`;
+      const tail = `\n${CLOSING}`;
+      return `${head}${renderFiles(status.files, maxLength - head.length - tail.length)}${tail}`;
     }
     case "unknown":
       return (

@@ -9,6 +9,7 @@ import {
   renderDrift,
   renderGates,
   MAX_DRIFT_FILES,
+  MAX_DRIFT_LENGTH,
   type GitRunner
 } from "../../src/hook/checkpoint.js";
 
@@ -361,6 +362,95 @@ describe("renderDrift", () => {
     expect(text).toContain("could not be determined");
     expect(text).toContain("shallow clone");
     expect(text).not.toContain("Changed since checkpoint");
+  });
+
+  const realisticFiles = Array.from(
+    { length: 10 },
+    (_, index) => `src/some/realistic/path/file-${index}.ts`
+  );
+
+  it("fits the ahead variant within the length budget with realistic inputs", () => {
+    const text = renderDrift(
+      { kind: "ahead", commitsBehind: 4, head: HEAD, branch: "main", files: realisticFiles },
+      BASE
+    );
+    expect(text.length).toBeLessThanOrEqual(MAX_DRIFT_LENGTH);
+  });
+
+  it("fits the diverged variant within the length budget with realistic inputs", () => {
+    const text = renderDrift(
+      {
+        kind: "diverged",
+        onlyOnCheckpoint: 2,
+        onlyOnHead: 3,
+        head: HEAD,
+        branch: "main",
+        files: realisticFiles
+      },
+      BASE
+    );
+    expect(text.length).toBeLessThanOrEqual(MAX_DRIFT_LENGTH);
+  });
+
+  it("fits the behind variant within the length budget with realistic inputs", () => {
+    const text = renderDrift(
+      { kind: "behind", onlyOnCheckpoint: 3, head: HEAD, branch: "main", files: realisticFiles },
+      BASE
+    );
+    expect(text.length).toBeLessThanOrEqual(MAX_DRIFT_LENGTH);
+  });
+
+  it("keeps the closing instruction even when the file list is oversized", () => {
+    for (const text of [
+      renderDrift(
+        { kind: "ahead", commitsBehind: 4, head: HEAD, branch: "main", files: realisticFiles },
+        BASE
+      ),
+      renderDrift(
+        {
+          kind: "diverged",
+          onlyOnCheckpoint: 2,
+          onlyOnHead: 3,
+          head: HEAD,
+          branch: "main",
+          files: realisticFiles
+        },
+        BASE
+      ),
+      renderDrift(
+        { kind: "behind", onlyOnCheckpoint: 3, head: HEAD, branch: "main", files: realisticFiles },
+        BASE
+      )
+    ]) {
+      expect(text.endsWith("Verify Next Action still applies before acting.")).toBe(true);
+    }
+  });
+
+  it("drops file lines rather than prose or the closing line when paths are very long", () => {
+    const longFiles = Array.from({ length: 10 }, (_, index) => `a${"x".repeat(115)}${index}.ts`);
+    const text = renderDrift(
+      { kind: "ahead", commitsBehind: 4, head: HEAD, branch: "main", files: longFiles },
+      BASE
+    );
+
+    expect(text).toContain("Checkpoint drift:");
+    expect(text.endsWith("Verify Next Action still applies before acting.")).toBe(true);
+
+    const fileLineCount = longFiles.filter((file) => text.includes(`  ${file}`)).length;
+    expect(fileLineCount).toBeLessThan(10);
+  });
+
+  it("reports the actual number of omitted files, not a hardcoded count", () => {
+    const files = Array.from({ length: 13 }, (_, index) => `src/module/component-${index}.ts`);
+    const text = renderDrift(
+      { kind: "ahead", commitsBehind: 4, head: HEAD, branch: "main", files },
+      BASE
+    );
+
+    const shown = files.filter((file) => text.includes(`  ${file}`)).length;
+    const expectedOmitted = files.length - shown;
+
+    expect(text).toContain(`(+${expectedOmitted} more)`);
   });
 });
 
