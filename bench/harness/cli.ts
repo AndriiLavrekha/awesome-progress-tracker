@@ -2,6 +2,7 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { normalizeSession } from "./normalize.js";
 import { loadScenario } from "./scenario.js";
 import { scoreTranscript } from "./score.js";
 import { applyCondition, materialize } from "./setup.js";
@@ -15,6 +16,7 @@ function usage(): string {
   return [
     "Usage:",
     "  npm run bench -- setup <scenario-id> [--condition tracker|baseline|<name>]",
+    "  npm run bench -- normalize <session.jsonl> <transcript.jsonl>",
     "  npm run bench -- score <scenario-id> <transcript.jsonl>",
     ""
   ].join("\n");
@@ -62,6 +64,25 @@ async function runSetup(argv: string[]): Promise<number> {
   return 0;
 }
 
+// Converts a Claude Code session transcript into the graded event stream.
+// Kept separate from score so the normalized file is an artifact in its own
+// right: it is what a disputed number is recomputed from, and it can be read
+// by someone who does not have the original session.
+async function runNormalize(argv: string[]): Promise<number> {
+  const sessionPath = argv[1];
+  const outPath = argv[2];
+  if (!sessionPath || !outPath) {
+    process.stderr.write(usage());
+    return 1;
+  }
+
+  const events = normalizeSession(await fs.readFile(sessionPath, "utf-8"));
+  await fs.writeFile(outPath, events.map((event) => JSON.stringify(event)).join("\n") + "\n", "utf-8");
+
+  process.stdout.write(`wrote ${events.length} events to ${outPath}\n`);
+  return 0;
+}
+
 async function runScore(argv: string[]): Promise<number> {
   const id = argv[1];
   const transcriptPath = argv[2];
@@ -98,6 +119,8 @@ export async function main(argv: string[]): Promise<number> {
     switch (argv[0]) {
       case "setup":
         return await runSetup(argv);
+      case "normalize":
+        return await runNormalize(argv);
       case "score":
         return await runScore(argv);
       default:
