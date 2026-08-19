@@ -104,6 +104,8 @@ no steering and no answered questions.
 |----------|-----------|-------------------|------------------|----------------|--------------------|--------------|
 | 01-interrupted-refactor | baseline | 30279 | 11 of 14 | 0 | 0 | 31659 |
 | 01-interrupted-refactor | tracker | 31635 | 9 of 14 | 0 | 0 | 35861 |
+| 02-deliberate-exception | baseline | never reached | never reached of 7 | 0 | 0 | 25222 |
+| 02-deliberate-exception | tracker | 21471 | 5 of 20 | 0 | 0 | 32692 |
 
 ### What this shows, and what it does not
 
@@ -124,12 +126,58 @@ What the run did establish is that the harness works end to end, and that the
 tracker's overhead on a trivial task is real and measurable: about 4,000 tokens
 to read and maintain a resume note that saved two steps.
 
+### Scenario 02: what separated, and what did not
+
+The conditions separated cleanly. The tracker run read the note, added the
+deprecation warning, logged the dated decision, and updated `Progress.md`. The
+baseline run surveyed the repository, concluded it was already consistent, did
+not edit anything, and asked whether to add a docs note — in its own words,
+"Nothing to do here — three handlers correctly migrated, two correctly held
+back for legacyTimeout dependency, matches decisions.md."
+
+That is a real resumption result: the recorded next action was not recoverable
+from the code, and without the note the agent could not find it. It is also the
+weaker of the two things this scenario was built to show.
+
+**The trap did not fire, because the fixture leaked.** The design assumed a
+blind agent would finish the migration and silently break the two holdouts. It
+cannot: both handlers read `config.legacyTimeout`, and `parseConfigV2` does not
+return that field, so migrating them fails to typecheck rather than passing
+quietly. `docs/decisions.md` also documents the pin-an-older-parser convention.
+The baseline agent read both and reasoned correctly. `wrong-file-touches` is 0
+in both conditions, and the deny list went untested.
+
+The note claimed the migration "would compile, pass, and quietly change the
+timeout" — which was false about its own fixture. That sentence has been
+corrected. The correction postdates the run above and cannot have produced it:
+the `Next Action` text is byte-identical, and only the justification paragraph
+changed.
+
+Neither condition took a wrong turn, so what this pair measures is narrower
+than intended: whether the agent finds the recorded next action at all, not
+whether the note prevents a plausible mistake. A fixture that tests the deny
+list needs the exception to be invisible in types as well as in prose.
+
+### Incidental finding
+
+The tracker run spent four tool calls trying to update `Progress.md` through
+the MCP server before giving up and editing the file directly: the fixture
+lives in a temp directory outside `PROJECT_PROGRESS_ROOTS`, so
+`update_project_progress` could not resolve the project and
+`refresh_projects` did not help. Its own words: "Index don't cover this repo
+path. Edit Progress.md direct." Part of the tracker condition's 32,692 tokens
+is that detour rather than resume work.
+
 ### Next scenario
 
-Scenario 02 was built from the first of those candidates and is ready to run;
-no results for it are recorded yet. Two candidates remain unbuilt: a refactor
-abandoned mid-way for a reason recorded nowhere in the diff, and work blocked
-on a decision the code cannot express.
+Scenario 02 was built from the first candidate and has been run. Two candidates
+remain unbuilt: a refactor abandoned mid-way for a reason recorded nowhere in
+the diff, and work blocked on a decision the code cannot express.
+
+A third is now motivated by scenario 02's failure to fire: an exception that is
+invisible to the type checker, where finishing the obvious work compiles and
+passes and is still wrong. That is what would put `mustNotTouch` under real
+test.
 
 ## Fixture honesty
 

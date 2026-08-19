@@ -20,10 +20,10 @@ Three of five handlers now call `parseConfigV2`: report, export, and sync.
 
 The remaining two, `src/handlers/legacy.ts` and `src/handlers/import.ts`, are
 deliberate exceptions and must stay on `parseConfig`. Both are fed customer
-configs that still carry `legacy_timeout`, and `parseConfigV2` silently drops
-unknown keys rather than failing on them, so migrating those two would compile,
-pass, and quietly change the timeout to the default. Nothing in the code says
-this. It is only recorded here.
+configs that still carry `legacy_timeout`, which `parseConfigV2` does not
+expose. The dependency is visible in the handlers; what is not visible is that
+it is permanent until the customer contract changes, and that the migration is
+therefore paused rather than merely unfinished.
 
 ## Next Action
 
