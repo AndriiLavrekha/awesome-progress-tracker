@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   ALLOWED_GATE_VALUES,
+  ALLOWED_HANDOFF,
   GATE_KEYS,
   OPTIONAL_FRONTMATTER,
   validateFrontmatter
@@ -111,5 +112,41 @@ describe("optional checkpoint frontmatter", () => {
       baseFrontmatter({ checkpoint_at: "2026-08-19T14:02:11+02:00" })
     );
     expect(errors).toEqual([]);
+  });
+});
+
+describe("handoff frontmatter", () => {
+  it("registers both keys as optional", () => {
+    expect(OPTIONAL_FRONTMATTER).toContain("handoff");
+    expect(OPTIONAL_FRONTMATTER).toContain("session_id");
+  });
+
+  it("accepts both handoff values", () => {
+    for (const value of ALLOWED_HANDOFF) {
+      expect(validateFrontmatter(baseFrontmatter({ handoff: value }))).toEqual([]);
+    }
+  });
+
+  it("rejects any other handoff value", () => {
+    expect(validateFrontmatter(baseFrontmatter({ handoff: "partial" }))).toContain(
+      "handoff must be one of: clean, interrupted"
+    );
+  });
+
+  it("rejects a non-string handoff", () => {
+    expect(validateFrontmatter(baseFrontmatter({ handoff: true }))).toContain(
+      "handoff must be one of: clean, interrupted"
+    );
+  });
+
+  it("accepts frontmatter with no handoff at all", () => {
+    expect(validateFrontmatter(baseFrontmatter())).toEqual([]);
+  });
+
+  it("accepts an arbitrary session_id without validating its format", () => {
+    expect(
+      validateFrontmatter(baseFrontmatter({ session_id: "cc27106a-264d-4a30-af81-c989f856fb17" }))
+    ).toEqual([]);
+    expect(validateFrontmatter(baseFrontmatter({ session_id: "anything at all" }))).toEqual([]);
   });
 });

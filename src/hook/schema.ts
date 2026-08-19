@@ -41,6 +41,8 @@ export const ALLOWED_GATE_VALUES = [
   "blocked"
 ] as const;
 
+export const ALLOWED_HANDOFF = ["clean", "interrupted"] as const;
+
 // Keys that may appear in Progress.md frontmatter but are never required.
 // Absent always means "unknown", never "invalid", so existing files stay valid
 // without migration. The session-handoff work extends this same list.
@@ -49,6 +51,8 @@ export const OPTIONAL_FRONTMATTER = [
   "base_branch",
   "worktree_dirty",
   "checkpoint_at",
+  "session_id",
+  "handoff",
   ...GATE_KEYS
 ] as const;
 
@@ -108,6 +112,10 @@ export function validateFrontmatter(frontmatter: Record<string, FrontmatterValue
     if (!shaped || Number.isNaN(Date.parse(value))) {
       errors.push("checkpoint_at must be an ISO 8601 timestamp");
     }
+  }
+
+  if ("handoff" in frontmatter && !ALLOWED_HANDOFF.includes(frontmatter.handoff as never)) {
+    errors.push(allowedMessage("handoff", ALLOWED_HANDOFF));
   }
 
   return errors;
