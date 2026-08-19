@@ -1,10 +1,11 @@
 import { promises as fs } from "node:fs";
-import { execFileSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { extractSection, parseFrontmatter } from "../mcp/markdown.js";
+import { replaceFrontmatterValue } from "../mcp/writer.js";
 import { readProjectTrackingState, setProjectTrackingState } from "../project-state.js";
+import { defaultGitRunner as git, readCheckpoint } from "./checkpoint.js";
 import { checkFreshness } from "./freshness.js";
 import { validateProgressFile } from "./validator.js";
 
@@ -104,11 +105,20 @@ async function bestEffortReadProjectState(cwd: string): Promise<"unknown" | "opt
   }
 }
 
-function git(cwd: string, args: string[]): string | null {
+async function bestEffortStampCheckpoint(cwd: string, progressPath: string): Promise<void> {
   try {
-    return execFileSync("git", args, { cwd, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] });
+    const fields = readCheckpoint(cwd, new Date());
+    if (!fields) return;
+
+    const markdown = await fs.readFile(progressPath, "utf-8");
+    let updated = replaceFrontmatterValue(markdown, "base_commit", fields.base_commit);
+    updated = replaceFrontmatterValue(updated, "base_branch", fields.base_branch);
+    updated = replaceFrontmatterValue(updated, "worktree_dirty", String(fields.worktree_dirty));
+    updated = replaceFrontmatterValue(updated, "checkpoint_at", fields.checkpoint_at);
+
+    await fs.writeFile(progressPath, updated, "utf-8");
   } catch {
-    return null;
+    // Best effort only: a stamping failure must never fail a session.
   }
 }
 
@@ -300,6 +310,12 @@ export async function handleStop(event: HookEvent, options: HandleStopOptions = 
       "project-progress/Progress.md was not updated this session. If you did meaningful work, " +
         "update Resume Snapshot, Next Action, and Blockers before finishing."
     );
+  }
+
+  if (!stale) {
+    // Only stamp when the agent actually updated Progress.md this session.
+    // Stamping an unchanged file would assert a verification that never happened.
+    await bestEffortStampCheckpoint(cwd, progressPath);
   }
 
   try {

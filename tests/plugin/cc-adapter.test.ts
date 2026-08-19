@@ -4,6 +4,7 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { handlePreCommit, handlePreEdit, handleSessionStart, handleStop } from "../../src/hook/cc-adapter.js";
+import { parseFrontmatter } from "../../src/mcp/markdown.js";
 import { readProjectTrackingState, setProjectTrackingState } from "../../src/project-state.js";
 
 async function withTrackerHome(run: (home: string) => Promise<void>): Promise<void> {
@@ -20,7 +21,7 @@ async function withTrackerHome(run: (home: string) => Promise<void>): Promise<vo
 
 async function makeRepo(): Promise<string> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "pp-cc-"));
-  execFileSync("git", ["init", "-q"], { cwd: dir, stdio: "ignore" });
+  execFileSync("git", ["init", "-q", "-b", "main"], { cwd: dir, stdio: "ignore" });
   execFileSync("git", ["config", "user.email", "t@example.com"], { cwd: dir, stdio: "ignore" });
   execFileSync("git", ["config", "user.name", "Test"], { cwd: dir, stdio: "ignore" });
   return dir;
@@ -306,5 +307,70 @@ describe("cc-adapter stop reminder", () => {
     const result = await handleStop({ cwd: dir, session_id: `no-state-${Date.now()}` });
     expect(result.code).toBe(2);
     expect(result.stderr).toContain("secrets");
+  });
+});
+
+async function commitAll(dir: string, message: string): Promise<string> {
+  execFileSync("git", ["add", "."], { cwd: dir, stdio: "ignore" });
+  execFileSync("git", ["commit", "-q", "-m", message], { cwd: dir, stdio: "ignore" });
+  return execFileSync("git", ["rev-parse", "HEAD"], { cwd: dir, encoding: "utf-8" }).trim();
+}
+
+describe("cc-adapter checkpoint stamping", () => {
+  it("stamps checkpoint fields when Progress.md was updated this session", async () => {
+    await withTrackerHome(async () => {
+      const dir = await makeRepo();
+      const file = await writeProgress(dir, progressDoc({ project: "Stamp" }));
+      const sha = await commitAll(dir, "init");
+
+      // Dirty the tree so the meaningful-work predicate passes.
+      await fs.writeFile(path.join(dir, "src.txt"), "work", "utf-8");
+
+      const sessionId = `s-stamp-${Date.now()}`;
+      await handleSessionStart({ cwd: dir, session_id: sessionId });
+
+      // Touch Progress.md after session start so freshness sees it as fresh.
+      const current = await fs.readFile(file, "utf-8");
+      await fs.writeFile(file, `${current}\n<!-- edited -->\n`, "utf-8");
+
+      const result = await handleStop({ cwd: dir, session_id: sessionId });
+
+      expect(result.code).toBe(0);
+      const frontmatter = parseFrontmatter(await fs.readFile(file, "utf-8"));
+      expect(frontmatter.base_commit).toBe(sha);
+      expect(frontmatter.base_branch).toBe("main");
+      expect(frontmatter.worktree_dirty).toBe(true);
+      expect(String(frontmatter.checkpoint_at)).toMatch(
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/
+      );
+    });
+  });
+
+  it("does not stamp when Progress.md is stale", async () => {
+    await withTrackerHome(async () => {
+      const dir = await makeRepo();
+      const file = await writeProgress(dir, progressDoc({ project: "NoStamp" }));
+      await commitAll(dir, "init");
+      await fs.writeFile(path.join(dir, "src.txt"), "work", "utf-8");
+
+      const sessionId = `s-nostamp-${Date.now()}`;
+      await handleSessionStart({ cwd: dir, session_id: sessionId });
+
+      await handleStop({ cwd: dir, session_id: sessionId });
+
+      const frontmatter = parseFrontmatter(await fs.readFile(file, "utf-8"));
+      expect(frontmatter.base_commit).toBeUndefined();
+    });
+  });
+
+  it("does not fail a stop outside a git repository", async () => {
+    await withTrackerHome(async () => {
+      const dir = await fs.mkdtemp(path.join(os.tmpdir(), "pp-nogit-stop-"));
+      await writeProgress(dir, progressDoc({ project: "NoRepo" }));
+
+      const result = await handleStop({ cwd: dir, session_id: `s-norepo-${Date.now()}` });
+
+      expect(result.code).toBe(0);
+    });
   });
 });
