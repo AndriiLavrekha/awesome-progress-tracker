@@ -26,6 +26,32 @@ export const ALLOWED_STATUSES = [
 
 export const ALLOWED_SENSITIVITY = ["normal", "private", "sensitive"] as const;
 
+export const GATE_KEYS = [
+  "gate_implementation",
+  "gate_tests",
+  "gate_review",
+  "gate_deploy"
+] as const;
+
+export const ALLOWED_GATE_VALUES = [
+  "not-started",
+  "in-progress",
+  "done",
+  "failing",
+  "blocked"
+] as const;
+
+// Keys that may appear in Progress.md frontmatter but are never required.
+// Absent always means "unknown", never "invalid", so existing files stay valid
+// without migration. The session-handoff work extends this same list.
+export const OPTIONAL_FRONTMATTER = [
+  "base_commit",
+  "base_branch",
+  "worktree_dirty",
+  "checkpoint_at",
+  ...GATE_KEYS
+] as const;
+
 function allowedMessage(name: string, allowed: readonly string[]): string {
   return `${name} must be one of: ${[...allowed].sort().join(", ")}`;
 }
@@ -57,6 +83,30 @@ export function validateFrontmatter(frontmatter: Record<string, FrontmatterValue
 
   if ("deployed" in frontmatter && typeof frontmatter.deployed !== "boolean") {
     errors.push("deployed must be a boolean");
+  }
+
+  for (const key of GATE_KEYS) {
+    if (key in frontmatter && !ALLOWED_GATE_VALUES.includes(frontmatter[key] as never)) {
+      errors.push(allowedMessage(key, ALLOWED_GATE_VALUES));
+    }
+  }
+
+  if ("worktree_dirty" in frontmatter && typeof frontmatter.worktree_dirty !== "boolean") {
+    errors.push("worktree_dirty must be a boolean");
+  }
+
+  // Stored full-length so it is unambiguous; every human-facing rendering
+  // shortens it. A hypothetical all-digit SHA parses as a number upstream and
+  // fails this check, which is the safe direction.
+  if ("base_commit" in frontmatter && !/^[0-9a-f]{40}$/.test(String(frontmatter.base_commit))) {
+    errors.push("base_commit must be a full 40-character hex SHA");
+  }
+
+  if (
+    "checkpoint_at" in frontmatter &&
+    Number.isNaN(Date.parse(String(frontmatter.checkpoint_at)))
+  ) {
+    errors.push("checkpoint_at must be an ISO 8601 timestamp");
   }
 
   return errors;
