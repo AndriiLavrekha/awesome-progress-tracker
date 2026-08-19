@@ -194,4 +194,64 @@ describe("resolveDrift", () => {
 
     expect(status).toEqual({ kind: "missing", head, branch: "main" });
   });
+
+  it("reports behind when the checkpoint is a descendant of HEAD", async () => {
+    const dir = await makeRepo();
+    await commit(dir, "a.txt", "a");
+    const bSha = await commit(dir, "b.txt", "b");
+    execFileSync("git", ["reset", "-q", "--hard", "HEAD~1"], { cwd: dir, stdio: "ignore" });
+
+    const status = resolveDrift(dir, bSha);
+
+    expect(status).toMatchObject({
+      kind: "behind",
+      onlyOnCheckpoint: 1
+    });
+    expect((status as { files: string[] }).files).toEqual(["b.txt"]);
+  });
+
+  it("reports unknown when ancestry cannot be determined at all", () => {
+    const head = "f".repeat(40);
+    const base = "1".repeat(40);
+    const { git } = stubGit({
+      "rev-parse HEAD": head,
+      [`cat-file -e ${base}^{commit}`]: "",
+      "rev-parse --abbrev-ref HEAD": "main",
+      [`merge-base --is-ancestor ${base} ${head}`]: null,
+      [`merge-base --is-ancestor ${head} ${base}`]: null,
+      [`rev-list --left-right --count ${base}...${head}`]: null
+    });
+
+    const status = resolveDrift("/repo", base, git);
+
+    expect(status).toEqual({ kind: "unknown", head, branch: "main" });
+  });
+
+  it("reports branch as (detached) through resolveDrift on a detached HEAD", async () => {
+    const dir = await makeRepo();
+    const base = await commit(dir, "a.txt", "a");
+    const head = await commit(dir, "b.txt", "b");
+    execFileSync("git", ["checkout", "-q", head], { cwd: dir, stdio: "ignore" });
+
+    const status = resolveDrift(dir, base);
+
+    expect(status).toMatchObject({ kind: "ahead", branch: "(detached)" });
+  });
+
+  it("falls back to 0 commitsBehind when rev-list --count fails on the ahead path", () => {
+    const head = "f".repeat(40);
+    const base = "1".repeat(40);
+    const { git } = stubGit({
+      "rev-parse HEAD": head,
+      [`cat-file -e ${base}^{commit}`]: "",
+      "rev-parse --abbrev-ref HEAD": "main",
+      [`merge-base --is-ancestor ${base} ${head}`]: "",
+      [`rev-list --count ${base}..${head}`]: null,
+      [`diff --name-only ${base}..${head}`]: ""
+    });
+
+    const status = resolveDrift("/repo", base, git);
+
+    expect(status).toMatchObject({ kind: "ahead", commitsBehind: 0 });
+  });
 });

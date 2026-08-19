@@ -58,8 +58,13 @@ export type DriftStatus =
       branch: string;
       files: string[];
     }
-  | { kind: "missing"; head: string; branch: string };
+  | { kind: "missing"; head: string; branch: string }
+  | { kind: "behind"; onlyOnCheckpoint: number; head: string; branch: string; files: string[] }
+  | { kind: "unknown"; head: string; branch: string };
 
+// The file list is deliberately uncapped here: execFileSync's default 1MB
+// maxBuffer already bounds it in practice. An enormous diff throws inside
+// defaultGitRunner, gets caught there, and degrades to null then [] below.
 function diffNames(cwd: string, git: GitRunner, range: string): string[] {
   const out = git(cwd, ["diff", "--name-only", range]);
   if (!out) return [];
@@ -94,9 +99,9 @@ export function resolveDrift(
   }
 
   // Same convention: exits 0 when base is an ancestor of head, 1 when not.
-  const isAncestor = git(cwd, ["merge-base", "--is-ancestor", baseCommit, head]) !== null;
+  const baseIsAncestor = git(cwd, ["merge-base", "--is-ancestor", baseCommit, head]) !== null;
 
-  if (isAncestor) {
+  if (baseIsAncestor) {
     return {
       kind: "ahead",
       commitsBehind: countCommits(cwd, git, `${baseCommit}..${head}`),
@@ -106,9 +111,22 @@ export function resolveDrift(
     };
   }
 
-  const counts = git(cwd, ["rev-list", "--left-right", "--count", `${baseCommit}...${head}`])
-    ?.trim()
-    .split(/\s+/);
+  const headIsAncestor = git(cwd, ["merge-base", "--is-ancestor", head, baseCommit]) !== null;
+
+  if (headIsAncestor) {
+    return {
+      kind: "behind",
+      onlyOnCheckpoint: countCommits(cwd, git, `${head}..${baseCommit}`),
+      head,
+      branch,
+      files: diffNames(cwd, git, `${head}..${baseCommit}`)
+    };
+  }
+
+  const raw = git(cwd, ["rev-list", "--left-right", "--count", `${baseCommit}...${head}`]);
+  if (raw === null) return { kind: "unknown", head, branch };
+
+  const counts = raw.trim().split(/\s+/);
   const onlyOnCheckpoint = Number(counts?.[0] ?? 0);
   const onlyOnHead = Number(counts?.[1] ?? 0);
 
