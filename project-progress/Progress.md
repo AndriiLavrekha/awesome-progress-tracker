@@ -5,7 +5,7 @@ status: in_progress
 path: C:/Users/nkinc/Documents/progress-tracker
 agent_last_used: claude
 updated: 2026-08-19
-last_milestone: Wrote four resume-hardening specs and four implementation plans on feat/resume-hardening
+last_milestone: Plan A complete: checkpoint validation and verification gates shipped on feat/resume-hardening
 deployed: true
 deployment_url: https://github.com/AndriiLavrekha/awesome-progress-tracker/releases/tag/v0.2.3
 sensitivity: normal
@@ -39,17 +39,17 @@ The approved direction is skill-first and project-local:
 
 ## Last Session
 
-Ran the full brainstorm/spec/plan workflow for the resume-hardening roadmap on a new `feat/resume-hardening` branch. No production code changed yet.
+Executed plan A (checkpoint validation and verification gates) end to end via subagent-driven development: a fresh implementer per task, then spec-compliance review, then code-quality review, with fix rounds until each cleared. 8/8 tasks done, 19 commits, suite 131 to 197 passing.
 
-Design decisions settled by the user: gates encode as flat `gate_*` frontmatter keys (the parser at `src/mcp/markdown.ts:29` is a flat scalar scanner, so a nested map would corrupt frontmatter); the Stop hook stamps checkpoints automatically; drift reports but never blocks; gate keys and values are both a fixed vocabulary; handoff lives in frontmatter, not machine-local session state; freshness moves to body hashing; conflicts return the current section content; the benchmark is an in-repo harness with human-driven runs.
+Shipped: eight optional frontmatter keys (`base_commit`, `base_branch`, `worktree_dirty`, `checkpoint_at`, four `gate_*`), `src/hook/checkpoint.ts` (git reading + drift resolution), `src/hook/checkpoint-render.ts` (self-bounding rendering), Stop-hook stamping through `writeFileAtomic`, SessionStart drift reporting, and the `set_project_gates` MCP tool. ADR 0018 records it.
 
-Two findings changed the plan mid-flight. Optimistic concurrency already exists — `writeFileAtomic` compares mtime — so ADR 0020 hardens it rather than building it. More seriously, SessionStart writing frontmatter would defeat the mtime-based freshness check and silently disable the ADR 0017 Stop gate; that forced the body-hash redesign and a matching change to `gitHasChanges`, which must now ignore `project-progress/` or every read-only session gets nagged.
+Review caught six defects that spec compliance did not, all in the plan rather than the implementations: `Date.parse` accepting non-ISO input while the error claimed ISO 8601; `merge-base --is-ancestor` failures on shallow clones being reported as a confident zero-count divergence; a `git reset --hard` backwards reported as two-way divergence; rendered drift exceeding its 400-char budget so end-truncation dropped the actionable closing line while keeping file names; unbounded branch-name interpolation reintroducing that overflow at 300 chars; and the Stop hook writing the canonical resume file with a plain `fs.writeFile`, risking both a lost update against concurrent MCP writes and a truncated file.
 
-Committed `69d34f3` (four specs) and `5d2f177` (four plans, 132 TDD steps).
+`DriftStatus` consequently has six variants, not four. Rendering bounds itself rather than being externally truncated. Drift is injected before the Resume Snapshot so an agent learns its state may be stale before absorbing it.
 
 ## Next Action
 
-Implement plan A, `docs/superpowers/plans/2026-08-19-checkpoint-validation.md`, task by task on `feat/resume-hardening`. Then B, C, D in that order; each plan names its cross-plan seams. The pending ADR 0016/0017 release on `main` is still unreleased and independent of this branch.
+Continue subagent-driven execution of plan B, `docs/superpowers/plans/2026-08-19-session-handoff.md`, starting from Task 1 (`src/hash.ts` body hashing). Then plan C (concurrency hardening) and plan D (benchmark). Plan B Task 4 is load-bearing: SessionStart writing frontmatter makes `gitHasChanges` always true, so it must stop counting `project-progress/` paths or every read-only session gets nagged.
 
 ## Remaining Work
 
@@ -89,7 +89,7 @@ Implement plan A, `docs/superpowers/plans/2026-08-19-checkpoint-validation.md`, 
 - [ ] Commit and release ADR 0016 (fold/archive) and ADR 0017 (fail-closed Stop gate).
 - [x] Brainstorm the resume-hardening roadmap and write four design specs.
 - [x] Write four task-by-task implementation plans from those specs.
-- [ ] Implement plan A: checkpoint validation and verification gates (ADR 0018).
+- [x] Implement plan A: checkpoint validation and verification gates (ADR 0018).
 - [ ] Implement plan B: session handoff and body-hash freshness (ADR 0019).
 - [ ] Implement plan C: content-hash write guard and mergeable conflicts (ADR 0020).
 - [ ] Implement plan D: resumability benchmark harness and first fixture (ADR 0021).
@@ -125,11 +125,12 @@ Implement plan A, `docs/superpowers/plans/2026-08-19-checkpoint-validation.md`, 
 - [x] Added `Done`-section auto-fold to `Archive.md` in `update_project_progress`, capped at `FOLD_THRESHOLD` (ADR 0016).
 - [x] Clarified in SKILL.md that `Resume Snapshot`/`Last Session` are replace-wholesale fields, not append targets.
 - [x] Wrote four resume-hardening specs and four implementation plans on `feat/resume-hardening`.
+- [x] Shipped plan A: optional checkpoint/gate frontmatter, drift resolution and rendering, Stop-hook stamping, SessionStart drift injection, and `set_project_gates` (ADR 0018).
 - [x] Made the Stop hook fail-closed on Claude Code (exit 2, once per session via `stopBlocked`), kept Codex on soft-only `stop-soft` until verified (ADR 0017).
 
 ## Blockers
 
-None. Specs and plans are committed on `feat/resume-hardening`; implementation has not started. The pending ADR 0016/0017 release on `main` is independent and still unreleased. ADR 0015 defines Hermes compatibility as Skill + MCP with lifecycle hooks deferred.
+None. Plan A is shipped on `feat/resume-hardening`; plans B, C, and D remain. One consequence is deliberately deferred to plan B Task 4: stamping leaves `Progress.md` dirty and the meaningful-work predicate still counts `project-progress/` paths. The pending ADR 0016/0017 release on `main` is independent and still unreleased. ADR 0015 defines Hermes compatibility as Skill + MCP with lifecycle hooks deferred.
 
 ## Deployment
 
