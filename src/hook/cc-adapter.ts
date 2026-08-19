@@ -143,15 +143,24 @@ async function bestEffortStampCheckpoint(
 
 // A porcelain line is "XY path", or "XY orig -> path" for a rename. The two
 // status columns are fixed-width, so the path starts at index 2.
-function porcelainPath(line: string): string {
+//
+// Returns a normalized classification KEY for a porcelain line, not a usable
+// filesystem path. Git quotes and octal-escapes paths containing non-ASCII or
+// special bytes; this deliberately does not unescape them, because the only
+// consumer is an ASCII prefix test that is unaffected by escaped tails. Do not
+// use this value to open a file.
+function porcelainPathKey(line: string): string {
   const rest = line.slice(2).trim();
   const arrow = rest.indexOf(" -> ");
   const target = arrow === -1 ? rest : rest.slice(arrow + 4);
-  return target.replace(/^"|"$/g, "").replace(/\\/g, "/");
+  const unquoted = target.replace(/^"|"$/g, "");
+  // Only normalize separators on unquoted paths. A quoted path may contain
+  // backslash escape sequences that are not separators.
+  return unquoted === target ? unquoted.replace(/\\/g, "/") : unquoted;
 }
 
 function isProgressPath(line: string): boolean {
-  const target = porcelainPath(line);
+  const target = porcelainPathKey(line);
   return target.startsWith("project-progress/") || target.includes("/project-progress/");
 }
 

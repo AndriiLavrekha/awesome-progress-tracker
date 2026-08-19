@@ -821,4 +821,60 @@ describe("cc-adapter meaningful-work predicate", () => {
       expect(result.code).toBe(0);
     });
   });
+
+  it("ignores a tracked file staged-renamed into project-progress/", async () => {
+    await withTrackerHome(async () => {
+      const dir = await makeRepo();
+      await writeProgress(dir, progressDoc({ project: "RenameIn" }));
+      await fs.writeFile(path.join(dir, "notes.txt"), "some notes", "utf-8");
+      await commitAll(dir, "init");
+
+      execFileSync("git", ["mv", "notes.txt", "project-progress/notes.txt"], { cwd: dir, stdio: "ignore" });
+      const porcelain = execFileSync("git", ["status", "--porcelain", "--untracked-files=all"], {
+        cwd: dir,
+        encoding: "utf-8"
+      });
+      // Confirm we actually produced a rename entry, not a separate add/delete pair.
+      expect(porcelain).toContain("notes.txt -> project-progress/notes.txt");
+
+      const result = await handleStop({ cwd: dir, session_id: `s-renamein-${Date.now()}` });
+
+      expect(result.code).toBe(0);
+    });
+  });
+
+  it("fires for a tracked file staged-renamed out of project-progress/", async () => {
+    await withTrackerHome(async () => {
+      const dir = await makeRepo();
+      await writeProgress(dir, progressDoc({ project: "RenameOut" }));
+      await fs.mkdir(path.join(dir, "project-progress"), { recursive: true });
+      await fs.writeFile(path.join(dir, "project-progress", "extra.txt"), "extra notes", "utf-8");
+      await commitAll(dir, "init");
+
+      execFileSync("git", ["mv", "project-progress/extra.txt", "extra.txt"], { cwd: dir, stdio: "ignore" });
+      const porcelain = execFileSync("git", ["status", "--porcelain", "--untracked-files=all"], {
+        cwd: dir,
+        encoding: "utf-8"
+      });
+      expect(porcelain).toContain("project-progress/extra.txt -> extra.txt");
+
+      const result = await handleStop({ cwd: dir, session_id: `s-renameout-${Date.now()}` });
+
+      expect(result.code).toBe(2);
+    });
+  });
+
+  it("fires for an untracked file whose name contains a space", async () => {
+    await withTrackerHome(async () => {
+      const dir = await makeRepo();
+      await writeProgress(dir, progressDoc({ project: "SpacePath" }));
+      await commitAll(dir, "init");
+
+      await fs.writeFile(path.join(dir, "my notes.txt"), "work", "utf-8");
+
+      const result = await handleStop({ cwd: dir, session_id: `s-space-${Date.now()}` });
+
+      expect(result.code).toBe(2);
+    });
+  });
 });
