@@ -20,6 +20,8 @@ import {
 } from "../../src/mcp/server.js";
 import { writeProjectIndex } from "../../src/mcp/index.js";
 import type { ProjectSummary } from "../../src/mcp/schema.js";
+import { replaceFrontmatterValue } from "../../src/mcp/writer.js";
+import { parseFrontmatter } from "../../src/mcp/markdown.js";
 
 function indexSummary(overrides: Partial<ProjectSummary>): ProjectSummary {
   return {
@@ -276,5 +278,63 @@ describe("gateFrontmatterUpdates", () => {
       ["gate_implementation", "done"],
       ["gate_deploy", "done"]
     ]);
+  });
+
+  // These two cover the handler's transform composition (gateFrontmatterUpdates
+  // feeding replaceFrontmatterValue over a real document) — not the MCP
+  // transport layer, which has no handler-level tests anywhere in this codebase.
+  it("leaves unsupplied gates untouched when applied to a document", () => {
+    const doc = [
+      "---",
+      "project: Demo",
+      "status: active",
+      "gate_implementation: done",
+      "gate_tests: not-started",
+      "gate_review: pending",
+      "gate_deploy: blocked",
+      "---",
+      "",
+      "## Next Action",
+      "",
+      "Do the thing.",
+      ""
+    ].join("\n");
+
+    let updated = doc;
+    for (const [key, value] of gateFrontmatterUpdates({ tests: "failing" })) {
+      updated = replaceFrontmatterValue(updated, key, value);
+    }
+
+    const frontmatter = parseFrontmatter(updated);
+    expect(frontmatter.gate_tests).toBe("failing");
+    expect(frontmatter.gate_implementation).toBe("done");
+    expect(frontmatter.gate_review).toBe("pending");
+    expect(frontmatter.gate_deploy).toBe("blocked");
+  });
+
+  it("does not disturb the document body when writing a gate", () => {
+    const doc = [
+      "---",
+      "project: Demo",
+      "status: active",
+      "gate_implementation: done",
+      "gate_tests: not-started",
+      "gate_review: pending",
+      "gate_deploy: blocked",
+      "---",
+      "",
+      "## Next Action",
+      "",
+      "Do the thing.",
+      ""
+    ].join("\n");
+
+    let updated = doc;
+    for (const [key, value] of gateFrontmatterUpdates({ tests: "failing" })) {
+      updated = replaceFrontmatterValue(updated, key, value);
+    }
+
+    expect(updated).toContain("## Next Action");
+    expect(updated).toContain("Do the thing.");
   });
 });
