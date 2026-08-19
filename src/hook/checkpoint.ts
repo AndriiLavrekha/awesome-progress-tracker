@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { GATE_KEYS } from "./schema.js";
 
 export interface CheckpointFields {
   base_commit: string;
@@ -140,4 +141,81 @@ export function resolveDrift(
     // HEAD's side since the branches parted" means.
     files: diffNames(cwd, git, `${baseCommit}...${head}`)
   };
+}
+
+export const MAX_DRIFT_FILES = 10;
+
+const CLOSING = "Verify Next Action still applies before acting.";
+
+function shortSha(sha: string): string {
+  return sha.slice(0, 7);
+}
+
+function renderFiles(files: string[]): string {
+  if (files.length === 0) return "";
+  const shown = files.slice(0, MAX_DRIFT_FILES);
+  const extra = files.length - shown.length;
+  const lines = shown.map((file) => `  ${file}`);
+  if (extra > 0) lines.push(`  (+${extra} more)`);
+  return `\nChanged since checkpoint:\n${lines.join("\n")}`;
+}
+
+export function renderDrift(status: DriftStatus, baseCommit: string): string {
+  const base = shortSha(baseCommit);
+
+  switch (status.kind) {
+    case "none":
+      return "";
+    case "missing":
+      return (
+        `Checkpoint drift: stored base_commit ${base} is no longer in this ` +
+        `repository's history (squashed, rebased, or garbage collected). HEAD is ` +
+        `${shortSha(status.head)} (branch ${status.branch}). ${CLOSING}`
+      );
+    case "ahead": {
+      const noun = status.commitsBehind === 1 ? "commit" : "commits";
+      return (
+        `Checkpoint drift: stored base_commit ${base} is ${status.commitsBehind} ` +
+        `${noun} behind HEAD ${shortSha(status.head)} (branch ${status.branch}).` +
+        `${renderFiles(status.files)}\n${CLOSING}`
+      );
+    }
+    case "diverged":
+      return (
+        `Checkpoint drift: stored base_commit ${base} has diverged from HEAD ` +
+        `${shortSha(status.head)} (branch ${status.branch}): ` +
+        `${status.onlyOnCheckpoint} on the checkpoint side, ${status.onlyOnHead} on HEAD.` +
+        `${renderFiles(status.files)}\n${CLOSING}`
+      );
+    case "behind": {
+      const noun = status.onlyOnCheckpoint === 1 ? "commit" : "commits";
+      return (
+        `Checkpoint drift: HEAD ${shortSha(status.head)} (branch ${status.branch}) is ` +
+        `${status.onlyOnCheckpoint} ${noun} behind the stored checkpoint ${base}, so the ` +
+        `tree was reset backwards past it.${renderFiles(status.files)}\n${CLOSING}`
+      );
+    }
+    case "unknown":
+      return (
+        `Checkpoint drift could not be determined: git could not compare stored ` +
+        `base_commit ${base} against HEAD ${shortSha(status.head)} (branch ` +
+        `${status.branch}). This is expected in a shallow clone. ${CLOSING}`
+      );
+  }
+}
+
+// Reports stored gate values verbatim. Vocabulary enforcement belongs to
+// validateFrontmatter; a file hand-edited to an odd value should surface it
+// rather than hide it.
+export function renderGates(frontmatter: Record<string, string | boolean | number>): string {
+  const parts: string[] = [];
+
+  for (const key of GATE_KEYS) {
+    const value = frontmatter[key];
+    if (value === undefined || value === "done") continue;
+    parts.push(`${key.replace(/^gate_/, "")}=${String(value)}`);
+  }
+
+  if (parts.length === 0) return "";
+  return `Gates at checkpoint: ${parts.join(", ")}`;
 }

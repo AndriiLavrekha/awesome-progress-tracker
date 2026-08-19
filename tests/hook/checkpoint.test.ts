@@ -3,7 +3,14 @@ import { execFileSync } from "node:child_process";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { readCheckpoint, resolveDrift, type GitRunner } from "../../src/hook/checkpoint.js";
+import {
+  readCheckpoint,
+  resolveDrift,
+  renderDrift,
+  renderGates,
+  MAX_DRIFT_FILES,
+  type GitRunner
+} from "../../src/hook/checkpoint.js";
 
 function stubGit(responses: Record<string, string | null>) {
   const calls: Array<{ cwd: string; args: string[] }> = [];
@@ -253,5 +260,127 @@ describe("resolveDrift", () => {
     const status = resolveDrift("/repo", base, git);
 
     expect(status).toMatchObject({ kind: "ahead", commitsBehind: 0 });
+  });
+});
+
+const BASE = "e7d3f98a1b2c3d4e5f60718293a4b5c6d7e8f900";
+const HEAD = "def456ab1c2d3e4f5061728394a5b6c7d8e9f001";
+
+describe("renderDrift", () => {
+  it("renders nothing when there is no drift", () => {
+    expect(renderDrift({ kind: "none" }, BASE)).toBe("");
+  });
+
+  it("renders an ancestor checkpoint with a file list", () => {
+    const text = renderDrift(
+      {
+        kind: "ahead",
+        commitsBehind: 4,
+        head: HEAD,
+        branch: "main",
+        files: ["src/mcp/writer.ts", "src/hook/cc-adapter.ts"]
+      },
+      BASE
+    );
+
+    expect(text).toContain("stored base_commit e7d3f98");
+    expect(text).toContain("4 commits behind HEAD def456a (branch main)");
+    expect(text).toContain("  src/mcp/writer.ts");
+    expect(text).toContain("Verify Next Action still applies");
+  });
+
+  it("uses singular wording for a single commit", () => {
+    const text = renderDrift(
+      { kind: "ahead", commitsBehind: 1, head: HEAD, branch: "main", files: [] },
+      BASE
+    );
+    expect(text).toContain("1 commit behind");
+    expect(text).not.toContain("Changed since checkpoint");
+  });
+
+  it("caps the file list and reports the remainder", () => {
+    const files = Array.from({ length: MAX_DRIFT_FILES + 3 }, (_, index) => `f${index}.ts`);
+    const text = renderDrift(
+      { kind: "ahead", commitsBehind: 2, head: HEAD, branch: "main", files },
+      BASE
+    );
+
+    expect(text).toContain("  f0.ts");
+    expect(text).toContain(`  f${MAX_DRIFT_FILES - 1}.ts`);
+    expect(text).not.toContain(`  f${MAX_DRIFT_FILES}.ts`);
+    expect(text).toContain("(+3 more)");
+  });
+
+  it("renders divergence with both sides", () => {
+    const text = renderDrift(
+      {
+        kind: "diverged",
+        onlyOnCheckpoint: 2,
+        onlyOnHead: 3,
+        head: HEAD,
+        branch: "main",
+        files: ["a.ts"]
+      },
+      BASE
+    );
+
+    expect(text).toContain("has diverged from HEAD def456a");
+    expect(text).toContain("2 on the checkpoint side, 3 on HEAD");
+  });
+
+  it("renders a missing checkpoint without a file list", () => {
+    const text = renderDrift({ kind: "missing", head: HEAD, branch: "main" }, BASE);
+
+    expect(text).toContain("no longer in this repository's history");
+    expect(text).not.toContain("Changed since checkpoint");
+  });
+
+  it("renders a backwards reset as behind the checkpoint", () => {
+    const text = renderDrift(
+      { kind: "behind", onlyOnCheckpoint: 3, head: HEAD, branch: "main", files: ["a.ts"] },
+      BASE
+    );
+
+    expect(text).toContain("3 commits behind the stored checkpoint");
+    expect(text).toContain("reset backwards past it");
+    expect(text).toContain("  a.ts");
+  });
+
+  it("uses singular wording for a single commit behind the checkpoint", () => {
+    const text = renderDrift(
+      { kind: "behind", onlyOnCheckpoint: 1, head: HEAD, branch: "main", files: [] },
+      BASE
+    );
+
+    expect(text).toContain("1 commit behind the stored checkpoint");
+  });
+
+  it("renders an undetermined comparison without inventing counts", () => {
+    const text = renderDrift({ kind: "unknown", head: HEAD, branch: "main" }, BASE);
+
+    expect(text).toContain("could not be determined");
+    expect(text).toContain("shallow clone");
+    expect(text).not.toContain("Changed since checkpoint");
+  });
+});
+
+describe("renderGates", () => {
+  it("renders nothing when no gates are present", () => {
+    expect(renderGates({ project: "Demo" })).toBe("");
+  });
+
+  it("renders nothing when every present gate is done", () => {
+    expect(renderGates({ gate_tests: "done", gate_review: "done" })).toBe("");
+  });
+
+  it("renders only the gates that are not done, in canonical key order", () => {
+    const text = renderGates({
+      gate_implementation: "done",
+      gate_tests: "failing",
+      gate_review: "pending",
+      gate_deploy: "not-started"
+    });
+
+    expect(text).toBe("Gates at checkpoint: tests=failing, review=pending, deploy=not-started");
   });
 });
