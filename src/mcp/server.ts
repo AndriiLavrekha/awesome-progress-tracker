@@ -5,7 +5,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import * as z from "zod/v4";
 import { DEFAULT_DISCOVERY_EXCLUDES, discoverProjects } from "./discovery.js";
 import { readProjectIndex, refreshProjectIndex, upsertIndexedProject } from "./index.js";
-import { parseProjectSummary } from "./markdown.js";
+import { extractSection, parseFrontmatter, parseProjectSummary } from "./markdown.js";
 import { sha256 } from "../hash.js";
 import path from "node:path";
 import {
@@ -18,6 +18,7 @@ import {
   replaceSection,
   replaceSectionWithOperation,
   writeFileAtomic,
+  ProgressConflictError,
   validateLastMilestone,
   validateSectionContent,
   validateSectionName
@@ -233,6 +234,58 @@ export async function resetProjectTrackingStateJson(
     reset: await resetProjectTrackingState(project, options),
     path: project.replace(/\\/g, "/")
   });
+}
+
+export interface ConflictOptions {
+  section?: string;
+  keys?: string[];
+}
+
+// Builds the payload a caller needs in order to merge and retry without a
+// second round trip: the current content of the section it tried to write, or
+// the current values of the frontmatter keys it tried to set.
+export function conflictPayload(
+  currentMarkdown: string,
+  options: ConflictOptions
+): Record<string, unknown> {
+  const payload: Record<string, unknown> = {
+    error: "conflict",
+    hint: "another writer changed Progress.md; merge with the current values and retry"
+  };
+
+  if (options.section) {
+    payload.section = options.section;
+    payload.currentContent = extractSection(currentMarkdown, options.section);
+  }
+
+  if (options.keys && options.keys.length > 0) {
+    const frontmatter = parseFrontmatter(currentMarkdown);
+    payload.currentFrontmatter = Object.fromEntries(
+      options.keys.map((key) => [key, frontmatter[key] ?? null])
+    );
+  }
+
+  return payload;
+}
+
+// Deliberately does NOT route through textResult. That helper collapses any
+// payload carrying a string `error` into errorResult("invalid_request", ...),
+// which would discard currentContent and currentFrontmatter — the entire
+// reason the conflict payload exists. The result is built directly so the
+// merge data survives to the caller, while isError still marks the failure.
+async function conflictResult(
+  error: unknown,
+  progressPath: string,
+  options: ConflictOptions
+) {
+  if (!(error instanceof ProgressConflictError)) throw error;
+  const current = await fs.readFile(progressPath, "utf-8");
+  const payload = conflictPayload(current, options);
+  return {
+    content: [{ type: "text" as const, text: JSON.stringify(payload) }],
+    structuredContent: payload,
+    isError: true
+  };
 }
 
 export function successResult(structuredContent: Record<string, unknown>, text: string) {

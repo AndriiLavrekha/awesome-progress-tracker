@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import {
   boundProjectSummaries,
+  conflictPayload,
   compactProjectListItem,
   errorResult,
   lastMilestoneSchema,
@@ -365,5 +366,57 @@ describe("gateFrontmatterUpdates", () => {
     expect(frontmatter.project).toBe("Demo");
     expect(frontmatter.status).toBe("active");
     expect(updated).toContain("## Next Action");
+  });
+});
+
+const CONFLICT_DOC = [
+  "---",
+  "project: Demo",
+  "status: active",
+  "gate_tests: failing",
+  "---",
+  "",
+  "## Next Action",
+  "",
+  "Someone else wrote this.",
+  "",
+  "## Blockers",
+  "",
+  "None.",
+  ""
+].join("\n");
+
+describe("conflictPayload", () => {
+  it("returns the current content of the requested section", () => {
+    const payload = conflictPayload(CONFLICT_DOC, { section: "Next Action" });
+
+    expect(payload).toMatchObject({
+      error: "conflict",
+      section: "Next Action",
+      currentContent: "Someone else wrote this."
+    });
+    expect(String(payload.hint)).toContain("retry");
+  });
+
+  it("returns current values for the requested frontmatter keys", () => {
+    const payload = conflictPayload(CONFLICT_DOC, { keys: ["status", "gate_tests"] });
+
+    expect(payload).toMatchObject({
+      error: "conflict",
+      currentFrontmatter: { status: "active", gate_tests: "failing" }
+    });
+  });
+
+  it("reports a requested key that is absent as null", () => {
+    const payload = conflictPayload(CONFLICT_DOC, { keys: ["gate_deploy"] });
+
+    expect(payload).toMatchObject({ currentFrontmatter: { gate_deploy: null } });
+  });
+
+  it("omits section fields when no section was requested", () => {
+    const payload = conflictPayload(CONFLICT_DOC, { keys: ["status"] });
+
+    expect(payload.section).toBeUndefined();
+    expect(payload.currentContent).toBeUndefined();
   });
 });
