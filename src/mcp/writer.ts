@@ -170,24 +170,55 @@ export function appendToArchive(archiveMarkdown: string, items: string[]): strin
   return `${archiveMarkdown.trimEnd()}\n\n${ARCHIVE_HEADING}\n\n${entry}`;
 }
 
+// Serializes writes to one path within this process. The hash compare and the
+// rename are separated by awaits, so two concurrent callers holding the same
+// expected hash would both pass the compare and the second would silently
+// clobber the first — the exact overwrite the guard exists to prevent. Queuing
+// makes read-compare-rename atomic per path, so the loser re-reads the winner's
+// content and raises ProgressConflictError.
+//
+// This is a queue, not a lease: it has no TTL, no renewal, and no steal path,
+// and it cannot outlive the process that holds it. Writers in other processes
+// are still ordered only by the compare, which narrows their race to the
+// rename itself rather than closing it.
+const writeQueues = new Map<string, Promise<void>>();
+
+function enqueueWrite(key: string, task: () => Promise<void>): Promise<void> {
+  const previous = writeQueues.get(key) ?? Promise.resolve();
+  const run = previous.then(task, task);
+  // Keep the chain alive on rejection so a failed write does not poison the
+  // queue, and drop the entry once this write is the last one on it.
+  const settled = run.catch(() => undefined);
+  writeQueues.set(key, settled);
+  void settled.then(() => {
+    if (writeQueues.get(key) === settled) writeQueues.delete(key);
+  });
+  return run;
+}
+
 export async function writeFileAtomic(
   filePath: string,
   content: string,
   expectedHash: string
 ): Promise<void> {
-  // Content hashing has no resolution window. mtime is whole-second on some
-  // network and FAT mounts, so two writes inside one tick compared equal and
-  // the second silently won.
-  const current = await fs.readFile(filePath, "utf-8");
-  if (sha256(current) !== expectedHash) throw new ProgressConflictError(filePath);
+  return enqueueWrite(path.resolve(filePath), async () => {
+    // Content hashing has no resolution window. mtime is whole-second on some
+    // network and FAT mounts, so two writes inside one tick compared equal and
+    // the second silently won.
+    const current = await fs.readFile(filePath, "utf-8");
+    if (sha256(current) !== expectedHash) throw new ProgressConflictError(filePath);
 
-  const tempPath = path.join(path.dirname(filePath), `.${path.basename(filePath)}.${process.pid}.${Date.now()}.tmp`);
-  try {
-    await fs.writeFile(tempPath, content, "utf-8");
-    await fs.rename(tempPath, filePath);
-  } finally {
-    await fs.rm(tempPath, { force: true }).catch(() => undefined);
-  }
+    const tempPath = path.join(
+      path.dirname(filePath),
+      `.${path.basename(filePath)}.${process.pid}.${Date.now()}.tmp`
+    );
+    try {
+      await fs.writeFile(tempPath, content, "utf-8");
+      await fs.rename(tempPath, filePath);
+    } finally {
+      await fs.rm(tempPath, { force: true }).catch(() => undefined);
+    }
+  });
 }
 
 export function replaceFrontmatterValue(markdown: string, key: string, value: string): string {

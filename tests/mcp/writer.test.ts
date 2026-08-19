@@ -186,3 +186,34 @@ describe("writeFileAtomic content guard", () => {
     expect(await fs.readdir(dir)).toEqual(["Progress.md"]);
   });
 });
+
+describe("interleaved writes", () => {
+  it("lets exactly one of two concurrent writers win", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "pp-writer-race-"));
+    const filePath = path.join(dir, "Progress.md");
+    const original = "## Next Action\n\nOriginal.\n";
+    await fs.writeFile(filePath, original, "utf-8");
+
+    // Both writers read the same content, so both hold the same expected hash.
+    const hashA = sha256(await fs.readFile(filePath, "utf-8"));
+    const hashB = sha256(await fs.readFile(filePath, "utf-8"));
+
+    const writerA = "## Next Action\n\nWriter A.\n";
+    const writerB = "## Next Action\n\nWriter B.\n";
+
+    const results = await Promise.allSettled([
+      writeFileAtomic(filePath, writerA, hashA),
+      writeFileAtomic(filePath, writerB, hashB)
+    ]);
+
+    const fulfilled = results.filter((result) => result.status === "fulfilled");
+    const rejected = results.filter((result) => result.status === "rejected");
+
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expect((rejected[0] as PromiseRejectedResult).reason).toBeInstanceOf(ProgressConflictError);
+
+    const final = await fs.readFile(filePath, "utf-8");
+    expect(final === writerA || final === writerB).toBe(true);
+  });
+});
