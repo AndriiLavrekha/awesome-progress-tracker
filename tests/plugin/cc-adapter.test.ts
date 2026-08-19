@@ -552,8 +552,14 @@ describe("cc-adapter session-start drift", () => {
       const result = await handleSessionStart({ cwd: dir, session_id: `s-big-${Date.now()}` });
 
       const context = JSON.parse(result.stdout!).hookSpecificOutput.additionalContext;
-      expect(context).toContain("Verify Next Action still applies before acting.");
+      expect(context.trimEnd().endsWith("Verify Next Action still applies before acting.")).toBe(true);
       expect(context).toContain("more)");
+      // boundedContext appends "[truncated]" when it cuts a string. renderDrift
+      // self-bounds to MAX_DRIFT_LENGTH, so wrapping its output in
+      // boundedContext(drift, 400) is a silent no-op that no other assertion
+      // here can detect. Asserting the marker's absence is what actually
+      // proves the drift block reached the agent whole.
+      expect(context).not.toContain("[truncated]");
     });
   });
 });
