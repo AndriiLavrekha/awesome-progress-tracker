@@ -141,9 +141,34 @@ async function bestEffortStampCheckpoint(
   }
 }
 
+// A porcelain line is "XY path", or "XY orig -> path" for a rename. The two
+// status columns are fixed-width, so the path starts at index 2.
+function porcelainPath(line: string): string {
+  const rest = line.slice(2).trim();
+  const arrow = rest.indexOf(" -> ");
+  const target = arrow === -1 ? rest : rest.slice(arrow + 4);
+  return target.replace(/^"|"$/g, "").replace(/\\/g, "/");
+}
+
+function isProgressPath(line: string): boolean {
+  const target = porcelainPath(line);
+  return target.startsWith("project-progress/") || target.includes("/project-progress/");
+}
+
+// SessionStart and checkpoint stamping now write Progress.md, so a dirty
+// progress folder is no longer evidence that the agent did any work. Only
+// changes elsewhere count.
 function gitHasChanges(cwd: string): boolean {
-  const out = git(cwd, ["status", "--porcelain"]);
-  return out !== null && out.trim().length > 0;
+  // --untracked-files=all keeps git from collapsing a wholly-untracked
+  // directory to a single "?? dir/" line, which would hide a nested
+  // project-progress/ folder inside another untracked directory.
+  const out = git(cwd, ["status", "--porcelain", "--untracked-files=all"]);
+  if (out === null) return false;
+
+  return out
+    .split(/\r?\n/)
+    .filter((line) => line.trim().length > 0)
+    .some((line) => !isProgressPath(line));
 }
 
 function stagedFiles(cwd: string): string[] {

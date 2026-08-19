@@ -751,3 +751,74 @@ describe("cc-adapter body-hash freshness", () => {
     });
   });
 });
+
+describe("cc-adapter meaningful-work predicate", () => {
+  it("stays silent when only progress files are dirty", async () => {
+    await withTrackerHome(async () => {
+      const dir = await makeRepo();
+      const file = await writeProgress(dir, progressDoc({ project: "OnlyProgress" }));
+      await commitAll(dir, "init");
+
+      // Dirty ONLY the progress file, as SessionStart and stamping now do.
+      const current = await fs.readFile(file, "utf-8");
+      await fs.writeFile(file, `${current}\n<!-- touched -->\n`, "utf-8");
+
+      const result = await handleStop({ cwd: dir, session_id: `s-onlyprog-${Date.now()}` });
+
+      expect(result.code).toBe(0);
+      expect(result.stdout).toBeUndefined();
+    });
+  });
+
+  it("still fires when a non-progress file is dirty", async () => {
+    await withTrackerHome(async () => {
+      const dir = await makeRepo();
+      await writeProgress(dir, progressDoc({ project: "RealWork" }));
+      await commitAll(dir, "init");
+      await fs.writeFile(path.join(dir, "src.txt"), "work", "utf-8");
+
+      const sessionId = `s-realwork-${Date.now()}`;
+      await handleSessionStart({ cwd: dir, session_id: sessionId });
+
+      const result = await handleStop({ cwd: dir, session_id: sessionId });
+
+      expect(result.code).toBe(2);
+    });
+  });
+
+  it("fires when both progress and non-progress files are dirty", async () => {
+    await withTrackerHome(async () => {
+      const dir = await makeRepo();
+      const file = await writeProgress(dir, progressDoc({ project: "Both" }));
+      await commitAll(dir, "init");
+
+      await fs.writeFile(path.join(dir, "src.txt"), "work", "utf-8");
+      const current = await fs.readFile(file, "utf-8");
+      await fs.writeFile(file, `${current}\n<!-- touched -->\n`, "utf-8");
+
+      const sessionId = `s-both-${Date.now()}`;
+      await handleSessionStart({ cwd: dir, session_id: sessionId });
+
+      const result = await handleStop({ cwd: dir, session_id: sessionId });
+
+      expect(result.code).toBe(2);
+    });
+  });
+
+  it("ignores a progress file in a nested directory", async () => {
+    await withTrackerHome(async () => {
+      const dir = await makeRepo();
+      await writeProgress(dir, progressDoc({ project: "Nested" }));
+      await commitAll(dir, "init");
+
+      // A porcelain path like "sub/project-progress/Notes.md" must also be ignored.
+      const nested = path.join(dir, "sub", "project-progress");
+      await fs.mkdir(nested, { recursive: true });
+      await fs.writeFile(path.join(nested, "Notes.md"), "note", "utf-8");
+
+      const result = await handleStop({ cwd: dir, session_id: `s-nested-${Date.now()}` });
+
+      expect(result.code).toBe(0);
+    });
+  });
+});
