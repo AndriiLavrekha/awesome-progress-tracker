@@ -86,4 +86,30 @@ describe("optional checkpoint frontmatter", () => {
     const errors = validateFrontmatter(baseFrontmatter({ checkpoint_at: "yesterday" }));
     expect(errors).toContain("checkpoint_at must be an ISO 8601 timestamp");
   });
+
+  it("rejects a gate key holding a non-string", () => {
+    const errors = validateFrontmatter(baseFrontmatter({ gate_tests: true }));
+    expect(errors).toContain(
+      "gate_tests must be one of: blocked, done, failing, in-progress, not-started"
+    );
+  });
+
+  it("rejects an uppercase-hex base_commit", () => {
+    const errors = validateFrontmatter(
+      baseFrontmatter({ base_commit: "E7D3F98A1B2C3D4E5F60718293A4B5C6D7E8F900" })
+    );
+    expect(errors).toContain("base_commit must be a full 40-character hex SHA");
+  });
+
+  it("rejects checkpoint_at as a bare number", () => {
+    const errors = validateFrontmatter(baseFrontmatter({ checkpoint_at: 1755612131 }));
+    expect(errors).toContain("checkpoint_at must be an ISO 8601 timestamp");
+  });
+
+  it("accepts checkpoint_at with an explicit offset", () => {
+    const errors = validateFrontmatter(
+      baseFrontmatter({ checkpoint_at: "2026-08-19T14:02:11+02:00" })
+    );
+    expect(errors).toEqual([]);
+  });
 });

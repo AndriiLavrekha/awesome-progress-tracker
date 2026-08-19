@@ -102,11 +102,12 @@ export function validateFrontmatter(frontmatter: Record<string, FrontmatterValue
     errors.push("base_commit must be a full 40-character hex SHA");
   }
 
-  if (
-    "checkpoint_at" in frontmatter &&
-    Number.isNaN(Date.parse(String(frontmatter.checkpoint_at)))
-  ) {
-    errors.push("checkpoint_at must be an ISO 8601 timestamp");
+  if ("checkpoint_at" in frontmatter) {
+    const value = String(frontmatter.checkpoint_at);
+    const shaped = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/.test(value);
+    if (!shaped || Number.isNaN(Date.parse(value))) {
+      errors.push("checkpoint_at must be an ISO 8601 timestamp");
+    }
   }
 
   return errors;
