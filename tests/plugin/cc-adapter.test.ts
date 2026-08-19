@@ -878,3 +878,110 @@ describe("cc-adapter meaningful-work predicate", () => {
     });
   });
 });
+
+describe("cc-adapter session handoff", () => {
+  it("marks a session interrupted at start", async () => {
+    await withTrackerHome(async () => {
+      const dir = await makeRepo();
+      const file = await writeProgress(dir, progressDoc({ project: "Handoff" }));
+      await commitAll(dir, "init");
+
+      await handleSessionStart({ cwd: dir, session_id: "sess-one" });
+
+      const frontmatter = parseFrontmatter(await fs.readFile(file, "utf-8"));
+      expect(frontmatter.handoff).toBe("interrupted");
+      expect(frontmatter.session_id).toBe("sess-one");
+    });
+  });
+
+  it("reports a previous unclean handoff before overwriting it", async () => {
+    await withTrackerHome(async () => {
+      const dir = await makeRepo();
+      await writeProgress(
+        dir,
+        progressDoc({ project: "Handoff2", handoff: "interrupted", session_id: "sess-dead" })
+      );
+      await commitAll(dir, "init");
+
+      const result = await handleSessionStart({ cwd: dir, session_id: "sess-two" });
+
+      const context = JSON.parse(result.stdout!).hookSpecificOutput.additionalContext;
+      expect(context).toContain("Previous session sess-dead ended without a clean handoff");
+    });
+  });
+
+  it("stays silent when the previous handoff was clean", async () => {
+    await withTrackerHome(async () => {
+      const dir = await makeRepo();
+      await writeProgress(
+        dir,
+        progressDoc({ project: "Handoff3", handoff: "clean", session_id: "sess-old" })
+      );
+      await commitAll(dir, "init");
+
+      const result = await handleSessionStart({ cwd: dir, session_id: "sess-three" });
+
+      const context = JSON.parse(result.stdout!).hookSpecificOutput.additionalContext;
+      expect(context).not.toContain("without a clean handoff");
+    });
+  });
+
+  it("reports an unknown previous session when session_id is absent", async () => {
+    await withTrackerHome(async () => {
+      const dir = await makeRepo();
+      await writeProgress(dir, progressDoc({ project: "Handoff4", handoff: "interrupted" }));
+      await commitAll(dir, "init");
+
+      const result = await handleSessionStart({ cwd: dir, session_id: "sess-four" });
+
+      const context = JSON.parse(result.stdout!).hookSpecificOutput.additionalContext;
+      expect(context).toContain("Previous session (unknown) ended without a clean handoff");
+    });
+  });
+
+  it("flips handoff to clean when the stop gate passes", async () => {
+    await withTrackerHome(async () => {
+      const dir = await makeRepo();
+      const file = await writeProgress(dir, progressDoc({ project: "Handoff5" }));
+      await commitAll(dir, "init");
+      await fs.writeFile(path.join(dir, "src.txt"), "work", "utf-8");
+
+      const sessionId = "sess-five";
+      await handleSessionStart({ cwd: dir, session_id: sessionId });
+
+      const current = await fs.readFile(file, "utf-8");
+      await fs.writeFile(file, current.replace("Wire the widget.", "Ship the widget."), "utf-8");
+
+      await handleStop({ cwd: dir, session_id: sessionId });
+
+      expect(parseFrontmatter(await fs.readFile(file, "utf-8")).handoff).toBe("clean");
+    });
+  });
+
+  it("leaves handoff interrupted when the stop gate finds the file stale", async () => {
+    await withTrackerHome(async () => {
+      const dir = await makeRepo();
+      const file = await writeProgress(dir, progressDoc({ project: "Handoff6" }));
+      await commitAll(dir, "init");
+      await fs.writeFile(path.join(dir, "src.txt"), "work", "utf-8");
+
+      const sessionId = "sess-six";
+      await handleSessionStart({ cwd: dir, session_id: sessionId });
+
+      await handleStop({ cwd: dir, session_id: sessionId });
+
+      expect(parseFrontmatter(await fs.readFile(file, "utf-8")).handoff).toBe("interrupted");
+    });
+  });
+
+  it("still records a clean handoff outside a git repository", async () => {
+    await withTrackerHome(async () => {
+      const dir = await fs.mkdtemp(path.join(os.tmpdir(), "pp-handoff-nogit-"));
+      const file = await writeProgress(dir, progressDoc({ project: "Handoff7" }));
+
+      await handleSessionStart({ cwd: dir, session_id: "sess-seven" });
+
+      expect(parseFrontmatter(await fs.readFile(file, "utf-8")).handoff).toBe("interrupted");
+    });
+  });
+});

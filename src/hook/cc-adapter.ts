@@ -113,21 +113,41 @@ async function bestEffortReadProjectState(cwd: string): Promise<"unknown" | "opt
   }
 }
 
-async function bestEffortStampCheckpoint(
+async function bestEffortMarkHandoff(
+  progressPath: string,
+  handoff: "clean" | "interrupted",
+  sessionId?: string
+): Promise<boolean> {
+  try {
+    const fileState = await fs.stat(progressPath);
+    const markdown = await fs.readFile(progressPath, "utf-8");
+    let updated = replaceFrontmatterValue(markdown, "handoff", handoff);
+    if (sessionId) updated = replaceFrontmatterValue(updated, "session_id", sessionId);
+    await writeFileAtomic(progressPath, updated, fileState.mtimeMs);
+    return true;
+  } catch {
+    // Best effort only: a handoff write must never fail a session.
+    return false;
+  }
+}
+
+async function bestEffortRecordSessionEnd(
   cwd: string,
   progressPath: string,
   now: Date = new Date()
 ): Promise<boolean> {
   try {
-    const fields = readCheckpoint(cwd, now);
-    if (!fields) return false;
-
     const fileState = await fs.stat(progressPath);
     const markdown = await fs.readFile(progressPath, "utf-8");
-    let updated = replaceFrontmatterValue(markdown, "base_commit", fields.base_commit);
-    updated = replaceFrontmatterValue(updated, "base_branch", fields.base_branch);
-    updated = replaceFrontmatterValue(updated, "worktree_dirty", String(fields.worktree_dirty));
-    updated = replaceFrontmatterValue(updated, "checkpoint_at", fields.checkpoint_at);
+    let updated = replaceFrontmatterValue(markdown, "handoff", "clean");
+
+    const fields = readCheckpoint(cwd, now);
+    if (fields) {
+      updated = replaceFrontmatterValue(updated, "base_commit", fields.base_commit);
+      updated = replaceFrontmatterValue(updated, "base_branch", fields.base_branch);
+      updated = replaceFrontmatterValue(updated, "worktree_dirty", String(fields.worktree_dirty));
+      updated = replaceFrontmatterValue(updated, "checkpoint_at", fields.checkpoint_at);
+    }
 
     // writeFileAtomic throws "Progress file changed on disk" when another
     // writer (e.g. an MCP update_project_progress call) raced us and won.
@@ -136,7 +156,7 @@ async function bestEffortStampCheckpoint(
     await writeFileAtomic(progressPath, updated, fileState.mtimeMs);
     return true;
   } catch {
-    // Best effort only: a stamping failure must never fail a session.
+    // Best effort only: a recording failure must never fail a session.
     return false;
   }
 }
@@ -260,6 +280,14 @@ export async function handleSessionStart(event: HookEvent): Promise<HookResult> 
     }
   }
 
+  if (frontmatter.handoff === "interrupted") {
+    const previous = frontmatter.session_id ? String(frontmatter.session_id) : "(unknown)";
+    lines.push(
+      `\nPrevious session ${previous} ended without a clean handoff. ` +
+        "Progress.md may predate uncommitted work in the tree."
+    );
+  }
+
   const resume = extractSection(markdown, "Resume Snapshot");
   const next = extractSection(markdown, "Next Action");
   const blockers = extractSection(markdown, "Blockers");
@@ -271,6 +299,8 @@ export async function handleSessionStart(event: HookEvent): Promise<HookResult> 
 
   const gates = renderGates(frontmatter);
   if (gates) lines.push(`\n${gates}`);
+
+  await bestEffortMarkHandoff(progressPath, "interrupted", event.session_id);
 
   return {
     code: 0,
@@ -390,9 +420,11 @@ export async function handleStop(event: HookEvent, options: HandleStopOptions = 
   if (!stale) {
     // Only stamp when the agent actually updated Progress.md this session.
     // Stamping an unchanged file would assert a verification that never happened.
-    const stamped = await bestEffortStampCheckpoint(cwd, progressPath);
-    if (!stamped) {
-      warnings.push("Checkpoint stamp failed; drift detection may be unavailable next session.");
+    const recorded = await bestEffortRecordSessionEnd(cwd, progressPath);
+    if (!recorded) {
+      warnings.push(
+        "Checkpoint and handoff were not recorded; drift detection may be unavailable next session."
+      );
     }
   }
 
