@@ -2,7 +2,7 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { bodyHash } from "../hash.js";
+import { bodyHash, sha256 } from "../hash.js";
 import { extractSection, parseFrontmatter } from "../mcp/markdown.js";
 import { replaceFrontmatterValue, writeFileAtomic } from "../mcp/writer.js";
 import { readProjectTrackingState, setProjectTrackingState } from "../project-state.js";
@@ -119,11 +119,11 @@ async function bestEffortMarkHandoff(
   sessionId?: string
 ): Promise<boolean> {
   try {
-    const fileState = await fs.stat(progressPath);
     const markdown = await fs.readFile(progressPath, "utf-8");
+    const expectedHash = sha256(markdown);
     let updated = replaceFrontmatterValue(markdown, "handoff", handoff);
     if (sessionId) updated = replaceFrontmatterValue(updated, "session_id", sessionId);
-    await writeFileAtomic(progressPath, updated, fileState.mtimeMs);
+    await writeFileAtomic(progressPath, updated, expectedHash);
     return true;
   } catch {
     // Best effort only: a handoff write must never fail a session.
@@ -137,8 +137,8 @@ async function bestEffortRecordSessionEnd(
   now: Date = new Date()
 ): Promise<boolean> {
   try {
-    const fileState = await fs.stat(progressPath);
     const markdown = await fs.readFile(progressPath, "utf-8");
+    const expectedHash = sha256(markdown);
     let updated = replaceFrontmatterValue(markdown, "handoff", "clean");
 
     const fields = readCheckpoint(cwd, now);
@@ -153,7 +153,7 @@ async function bestEffortRecordSessionEnd(
     // writer (e.g. an MCP update_project_progress call) raced us and won.
     // That is the correct outcome to swallow: their content is newer and
     // must not be clobbered by our stamp.
-    await writeFileAtomic(progressPath, updated, fileState.mtimeMs);
+    await writeFileAtomic(progressPath, updated, expectedHash);
     return true;
   } catch {
     // Best effort only: a recording failure must never fail a session.

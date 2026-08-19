@@ -5,6 +5,19 @@ export const MAX_SECTION_CONTENT_LENGTH = 4000;
 export const FOLD_THRESHOLD = 2800;
 const ARCHIVE_HEADING = "## Archived Done Items";
 
+// Thrown when the file changed between the caller's read and its write.
+// Typed rather than a bare Error so callers can distinguish a lost race from a
+// genuine I/O failure and respond with a mergeable payload.
+export class ProgressConflictError extends Error {
+  readonly filePath: string;
+
+  constructor(filePath: string) {
+    super("Progress file changed on disk; reread it before writing.");
+    this.name = "ProgressConflictError";
+    this.filePath = filePath;
+  }
+}
+
 export const ALLOWED_PROGRESS_SECTIONS = [
   "Resume Snapshot",
   "Current State",
@@ -157,9 +170,16 @@ export function appendToArchive(archiveMarkdown: string, items: string[]): strin
   return `${archiveMarkdown.trimEnd()}\n\n${ARCHIVE_HEADING}\n\n${entry}`;
 }
 
-export async function writeFileAtomic(filePath: string, content: string, expectedMtimeMs: number): Promise<void> {
-  const current = await fs.stat(filePath);
-  if (current.mtimeMs !== expectedMtimeMs) throw new Error("Progress file changed on disk; reread it before writing.");
+export async function writeFileAtomic(
+  filePath: string,
+  content: string,
+  expectedHash: string
+): Promise<void> {
+  // Content hashing has no resolution window. mtime is whole-second on some
+  // network and FAT mounts, so two writes inside one tick compared equal and
+  // the second silently won.
+  const current = await fs.readFile(filePath, "utf-8");
+  if (sha256(current) !== expectedHash) throw new ProgressConflictError(filePath);
 
   const tempPath = path.join(path.dirname(filePath), `.${path.basename(filePath)}.${process.pid}.${Date.now()}.tmp`);
   try {
@@ -205,3 +225,4 @@ export function replaceFrontmatterValue(markdown: string, key: string, value: st
 }
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { sha256 } from "../hash.js";

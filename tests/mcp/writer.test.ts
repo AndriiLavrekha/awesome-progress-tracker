@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { sha256 } from "../../src/hash.js";
 import {
   FOLD_THRESHOLD,
+  ProgressConflictError,
   MAX_LAST_MILESTONE_LENGTH,
   MAX_SECTION_CONTENT_LENGTH,
   appendToArchive,
@@ -40,16 +42,16 @@ describe("MCP writer helpers", () => {
     expect(replaceSectionWithOperation("## Next Action\n\nOld.\n", "Next Action", "New.").operation).toBe("replaced");
   });
 
-  it("refuses an atomic write when the file changed after it was read", async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "project-progress-writer-"));
+  it("rejects a write when the file changed since it was read", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "pp-writer-"));
     const filePath = path.join(dir, "Progress.md");
-    await fs.writeFile(filePath, "old", "utf-8");
-    const initial = await fs.stat(filePath);
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    await fs.writeFile(filePath, "other", "utf-8");
+    await fs.writeFile(filePath, "original", "utf-8");
+    const expected = sha256(await fs.readFile(filePath, "utf-8"));
 
-    await expect(writeFileAtomic(filePath, "new", initial.mtimeMs)).rejects.toThrow(/changed on disk/);
-    await expect(fs.readFile(filePath, "utf-8")).resolves.toBe("other");
+    await fs.writeFile(filePath, "someone else wrote this", "utf-8");
+
+    await expect(writeFileAtomic(filePath, "new", expected)).rejects.toThrow(ProgressConflictError);
+    expect(await fs.readFile(filePath, "utf-8")).toBe("someone else wrote this");
   });
 
   it("replaces an existing frontmatter value", () => {
@@ -136,5 +138,51 @@ describe("MCP writer helpers", () => {
     const archiveMarkdown = "# Archive\n\n## Archived Done Items\n";
 
     expect(appendToArchive(archiveMarkdown, [])).toBe(archiveMarkdown);
+  });
+});
+
+describe("writeFileAtomic content guard", () => {
+  it("writes when the content is unchanged", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "pp-writer-ok-"));
+    const filePath = path.join(dir, "Progress.md");
+    await fs.writeFile(filePath, "original", "utf-8");
+
+    await writeFileAtomic(filePath, "updated", sha256("original"));
+
+    expect(await fs.readFile(filePath, "utf-8")).toBe("updated");
+  });
+
+  it("permits a rewrite that produces identical bytes", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "pp-writer-idem-"));
+    const filePath = path.join(dir, "Progress.md");
+    await fs.writeFile(filePath, "same", "utf-8");
+
+    // Rewriting the file with identical content does not change its hash, so
+    // the guard must allow this. The old mtime check rejected it spuriously.
+    await fs.writeFile(filePath, "same", "utf-8");
+
+    await expect(writeFileAtomic(filePath, "updated", sha256("same"))).resolves.toBeUndefined();
+    expect(await fs.readFile(filePath, "utf-8")).toBe("updated");
+  });
+
+  it("carries the file path on the conflict error", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "pp-writer-path-"));
+    const filePath = path.join(dir, "Progress.md");
+    await fs.writeFile(filePath, "original", "utf-8");
+
+    await expect(writeFileAtomic(filePath, "new", sha256("stale"))).rejects.toMatchObject({
+      name: "ProgressConflictError",
+      filePath
+    });
+  });
+
+  it("leaves no temp files behind after a conflict", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "pp-writer-tmp-"));
+    const filePath = path.join(dir, "Progress.md");
+    await fs.writeFile(filePath, "original", "utf-8");
+
+    await expect(writeFileAtomic(filePath, "new", sha256("stale"))).rejects.toThrow();
+
+    expect(await fs.readdir(dir)).toEqual(["Progress.md"]);
   });
 });

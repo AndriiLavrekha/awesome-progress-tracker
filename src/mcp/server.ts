@@ -6,6 +6,7 @@ import * as z from "zod/v4";
 import { DEFAULT_DISCOVERY_EXCLUDES, discoverProjects } from "./discovery.js";
 import { readProjectIndex, refreshProjectIndex, upsertIndexedProject } from "./index.js";
 import { parseProjectSummary } from "./markdown.js";
+import { sha256 } from "../hash.js";
 import path from "node:path";
 import {
   ALLOWED_PROGRESS_SECTIONS,
@@ -329,8 +330,8 @@ export function createServer(): McpServer {
       if (resolution.error) return textResult(JSON.stringify({ error: resolution.error }));
       const match = resolution.project!;
 
-      const fileState = await fs.stat(match.progressPath);
       const markdown = await fs.readFile(match.progressPath, "utf-8");
+      const expectedHash = sha256(markdown);
 
       let sectionContent = content;
       let archived: string[] = [];
@@ -342,7 +343,7 @@ export function createServer(): McpServer {
 
       const result = replaceSectionWithOperation(markdown, section, sectionContent);
       const updated = result.markdown;
-      await writeFileAtomic(match.progressPath, updated, fileState.mtimeMs);
+      await writeFileAtomic(match.progressPath, updated, expectedHash);
       await upsertIndexedProject(parseProjectSummary(updated, match.progressPath));
 
       if (archived.length > 0) {
@@ -373,11 +374,11 @@ export function createServer(): McpServer {
       if (resolution.error) return textResult(JSON.stringify({ error: resolution.error }));
       const match = resolution.project!;
 
-      const fileState = await fs.stat(match.progressPath);
       const markdown = await fs.readFile(match.progressPath, "utf-8");
+      const expectedHash = sha256(markdown);
       const withStatus = replaceFrontmatterValue(markdown, "status", status);
       const updated = replaceFrontmatterValue(withStatus, "last_milestone", last_milestone);
-      await writeFileAtomic(match.progressPath, updated, fileState.mtimeMs);
+      await writeFileAtomic(match.progressPath, updated, expectedHash);
       await upsertIndexedProject(parseProjectSummary(updated, match.progressPath));
 
       return textResult(JSON.stringify({ updated: true, project, status, progressPath: match.progressPath }));
@@ -407,15 +408,15 @@ export function createServer(): McpServer {
       if (resolution.error) return textResult(JSON.stringify({ error: resolution.error }));
       const match = resolution.project!;
 
-      const fileState = await fs.stat(match.progressPath);
       const markdown = await fs.readFile(match.progressPath, "utf-8");
+      const expectedHash = sha256(markdown);
 
       let updated = markdown;
       for (const [key, value] of updates) {
         updated = replaceFrontmatterValue(updated, key, value);
       }
 
-      await writeFileAtomic(match.progressPath, updated, fileState.mtimeMs);
+      await writeFileAtomic(match.progressPath, updated, expectedHash);
 
       return textResult(
         JSON.stringify({
