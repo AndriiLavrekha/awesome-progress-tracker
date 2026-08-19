@@ -52,6 +52,16 @@ Not deployed.
 - Resume snapshot is concise and current.
 - Remaining work and blockers are accurate.
 
+## Verification
+
+Gates are set with the `set_project_gates` tool, not edited by hand. Each of
+`implementation`, `tests`, `review`, and `deploy` takes one of `not-started`,
+`in-progress`, `done`, `failing`, or `blocked`. An unset gate means unknown.
+
+Checkpoint fields (`base_commit`, `base_branch`, `worktree_dirty`,
+`checkpoint_at`) are stamped automatically when a session ends with this file
+updated. Do not edit them by hand.
+
 ## Resume Instructions
 
 Open this repository, read `project-progress/Progress.md`, then follow `Next Action`.
