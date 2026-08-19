@@ -1,0 +1,18 @@
+{
+  "correctNextAction": [
+    "wire\\s+folddonesection",
+    "call\\s+folddonesection.*server",
+    "Edit src/server\\.ts"
+  ],
+  "mustTouch": [
+    "src/server.ts"
+  ],
+  "mustNotTouch": [
+    "src/writer.ts"
+  ],
+  "alreadyDone": [
+    "implement\\s+folddonesection",
+    "write\\s+folddonesection",
+    "add\\s+folddonesection\\s+to\\s+writer"
+  ]
+}
