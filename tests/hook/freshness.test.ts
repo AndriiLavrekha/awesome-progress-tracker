@@ -3,6 +3,7 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { checkFreshness } from "../../src/hook/freshness.js";
+import { bodyHash } from "../../src/hash.js";
 
 async function progressFileWithMtime(mtime: Date): Promise<string> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "pp-freshness-"));
@@ -53,5 +54,82 @@ describe("checkFreshness", () => {
     });
     expect(result.shouldWarn).toBe(true);
     expect(result.shouldBlock).toBe(true);
+  });
+});
+
+async function writeTempProgress(content: string): Promise<string> {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "pp-fresh-"));
+  const file = path.join(dir, "Progress.md");
+  await fs.writeFile(file, content, "utf-8");
+  return file;
+}
+
+const DOC = "---\nproject: Demo\n---\n\n## Next Action\n\nDo the thing.\n";
+
+describe("checkFreshness with a session body hash", () => {
+  it("reports stale when only frontmatter changed", async () => {
+    const file = await writeTempProgress(DOC);
+    const recorded = bodyHash(DOC);
+
+    await fs.writeFile(
+      file,
+      "---\nproject: Demo\nhandoff: interrupted\n---\n\n## Next Action\n\nDo the thing.\n",
+      "utf-8"
+    );
+
+    const result = await checkFreshness(file, {
+      meaningfulWorkHappened: true,
+      sessionStartedAt: new Date(0),
+      completionBoundary: true,
+      sessionBodyHash: recorded
+    });
+
+    expect(result.isFresh).toBe(false);
+    expect(result.shouldBlock).toBe(true);
+  });
+
+  it("reports fresh when the body changed", async () => {
+    const file = await writeTempProgress(DOC);
+    const recorded = bodyHash(DOC);
+
+    await fs.writeFile(
+      file,
+      "---\nproject: Demo\n---\n\n## Next Action\n\nDo something else.\n",
+      "utf-8"
+    );
+
+    const result = await checkFreshness(file, {
+      meaningfulWorkHappened: true,
+      sessionStartedAt: new Date(0),
+      completionBoundary: true,
+      sessionBodyHash: recorded
+    });
+
+    expect(result.isFresh).toBe(true);
+  });
+
+  it("falls back to mtime when no hash was recorded", async () => {
+    const file = await writeTempProgress(DOC);
+
+    const result = await checkFreshness(file, {
+      meaningfulWorkHappened: true,
+      sessionStartedAt: new Date(0),
+      completionBoundary: true
+    });
+
+    expect(result.isFresh).toBe(true);
+  });
+
+  it("still short-circuits when no meaningful work happened", async () => {
+    const file = await writeTempProgress(DOC);
+
+    const result = await checkFreshness(file, {
+      meaningfulWorkHappened: false,
+      sessionStartedAt: new Date(0),
+      sessionBodyHash: bodyHash(DOC)
+    });
+
+    expect(result.isFresh).toBe(true);
+    expect(result.shouldWarn).toBe(false);
   });
 });
