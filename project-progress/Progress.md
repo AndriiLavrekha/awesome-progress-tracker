@@ -5,7 +5,7 @@ status: in_progress
 path: C:/Users/nkinc/Documents/progress-tracker
 agent_last_used: claude
 updated: 2026-08-19
-last_milestone: Plans A-D complete, stale project-path resolution fixed, dist rebuilt
+last_milestone: Plans A-D merged to main and pushed to origin
 deployed: true
 deployment_url: https://github.com/AndriiLavrekha/awesome-progress-tracker/releases/tag/v0.2.3
 sensitivity: normal
@@ -16,13 +16,13 @@ commit_progress: true
 
 ## Resume Snapshot
 
-All four plans (A checkpoint validation, B session handoff, C concurrency hardening, D resumability benchmark) are complete on `feat/resume-hardening`, 27 of 27 tasks. Suite 283 passing across 20 files; typecheck, build, and bench:build all green. Nothing released: the branch is unmerged and untagged.
+Plans A through D are merged to `main` and pushed to origin (`e7d3f98..870d10b`, 50 commits). `feat/resume-hardening` is also pushed and now tracks origin. Verified on `main` after the merge: 287 tests across 20 files, typecheck, build, and bench:build all green.
 
-Plan D added `bench/`, compiled through its own `bench/tsconfig.json` and absent from `package.json`'s `files`, so nothing benchmark-related ships. `bench/harness/` holds four modules plus a CLI: `scenario.ts` (expectations schema and loader), `transcript.ts` (normalized JSONL parsing, fails loudly on a bad line rather than silently scoring zero), `score.ts` (pure function over parsed events, three metrics), `setup.ts` (git-bundle materialization under named conditions). `npm run bench -- setup <id> [--condition tracker|baseline|<name>]` prints a temp directory and the prompt; `npm run bench -- score <id> <transcript.jsonl>` grades it. The harness never launches an agent.
+What shipped: checkpoint validation and gates (plan A), session handoff with body-hash freshness and a progress-aware work predicate (plan B), a content-hash write guard with mergeable conflict payloads and per-path write serialization (plan C), and the resumability benchmark harness under `bench/` (plan D). Plus a fix for stale project-path resolution (ADR 0022). ADRs 0015 through 0022 are all on main.
 
-One deviation from the plan text, recorded in ADR 0021: `materialize` pins `core.autocrlf=false` and `core.eol=lf` on the clone. The Task 5 byte-exactness test failed on this machine because the global Windows default rewrote line endings at checkout, which would have made every score depend on the platform that produced it.
+Still UNRELEASED: no tag has been cut. `dist/src` is committed and current.
 
-Scenario `01-interrupted-refactor` is in place and verified end to end under both built-in conditions. `bench/RESULTS.md` has the methodology and an empty results table: no benchmark runs have been performed yet.
+The benchmark has never been run. `bench/RESULTS.md` carries methodology and an empty results table by design.
 
 ## Current State
 
@@ -50,9 +50,11 @@ Bug injection is now standard practice for any test claiming to guard an invaria
 
 ## Next Action
 
-Run the benchmark. `npm run bench -- setup 01-interrupted-refactor --condition baseline` and `--condition tracker`, run an agent in each printed directory with the printed prompt, save normalized JSONL transcripts, score both, and paste the numbers into the results table in `bench/RESULTS.md`. Per the fixture-honesty rule in that file, if the two conditions score the same, the scenario is not measuring resumption and gets rewritten rather than reported.
+Two things, in either order.
 
-Then decide how to land `feat/resume-hardening`: it carries plans A through D plus ADRs 0016 through 0022, all unreleased and unmerged.
+1. Run the benchmark and fill in `bench/RESULTS.md`. `npm run bench -- setup 01-interrupted-refactor --condition baseline`, then the same with `--condition tracker`; drive an agent in each printed directory with the printed prompt, save a normalized JSONL transcript per run, score both, paste the numbers. This needs an agent with NO knowledge of the fixture or of `expected.json` — an agent that helped build the harness cannot produce an honest number for it. Per the fixture-honesty rule, if both conditions score the same, the scenario is not measuring resumption and gets rewritten rather than reported.
+
+2. Cut a release. Everything on main since `e7d3f98` is unreleased; `RELEASE_CHECKLIST.md` has the steps.
 
 ## Remaining Work
 
@@ -136,9 +138,9 @@ Then decide how to land `feat/resume-hardening`: it carries plans A through D pl
 
 None.
 
-The stale-path bug is FIXED (ADR 0022, commit `d01f49a`). `parseProjectSummary` now derives a project's directory from where its `Progress.md` actually is, and the ambiguity message lists `progressPath` rather than the shared project directory. Verified against a throwaway index over `D:/depot`: every entry carries its own directory and `resolveProject("D:/depot/awesome-progress-tracker")` resolves.
+Two notes on state outside this repository. The global index at `~/.awesome-progress-tracker/projects.json` was refreshed: 51 entries down to 9, pruning the dead worktree entry that made `progress-tracker` ambiguous along with 41 other entries whose `Progress.md` no longer existed. This repository still will not appear in that index until `PROJECT_PROGRESS_ROOTS` includes `D:/depot`; that is configuration, not a defect.
 
-The user's real index at `~/.awesome-progress-tracker/projects.json` has NOT been touched. It still holds two `progress-tracker` entries under the old `C:/Users/nkinc/Documents/progress-tracker` location, one of them a worktree whose `Progress.md` no longer exists. Running `refresh_projects` prunes the dead entry and re-derives the rest. This repo will not appear in that index until `PROJECT_PROGRESS_ROOTS` includes `D:/depot`, which is user configuration, not a code defect.
+`docs/adr/0001` through `0014`, `docs/demo-use-cases.md`, `docs/glossary.md`, `misc/`, and `.hermes/` remain untracked. They predate this work and were left alone rather than swept into the merge.
 
 ## Deployment
 
