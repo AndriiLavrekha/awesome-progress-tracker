@@ -62,6 +62,19 @@ sampling variance rather than resume quality.
 | id | what is frozen | correct next action |
 |----|----------------|---------------------|
 | 01-interrupted-refactor | `foldDoneSection` implemented but never called | wire it into `updateSection` in `src/server.ts` |
+| 02-deliberate-exception | a config-parser migration stopped at three of five handlers | warn on the legacy parser and record the on-hold decision, leaving the last two handlers alone |
+
+Scenario 02 is built as a trap. A half-finished migration invites finishing it,
+and `parseConfigV2` ignores unknown keys instead of rejecting them, so
+migrating the last two handlers compiles, passes, and silently resets a timeout
+those two callers still send. Nothing in the code marks them as exceptions; the
+reason exists only in the resume note. An agent without the note is expected to
+finish the migration, which `mustNotTouch` scores as two wrong-file touches,
+and to never reach the recorded next action.
+
+This is the property scenario 01 lacked. There, the correct action was
+inferable from an unused import, so the baseline needed no resume note to find
+it.
 
 ## Discarded runs
 
@@ -113,12 +126,10 @@ to read and maintain a resume note that saved two steps.
 
 ### Next scenario
 
-A scenario that measures resumption needs a next action that cannot be
-recovered from the code, because several next steps are equally defensible and
-only the resume note says which one was chosen and why. Candidates: a partly
-migrated call site where the remaining sites are deliberate exceptions; a
-refactor abandoned mid-way for a reason recorded nowhere in the diff; work
-blocked on a decision that the code cannot express.
+Scenario 02 was built from the first of those candidates and is ready to run;
+no results for it are recorded yet. Two candidates remain unbuilt: a refactor
+abandoned mid-way for a reason recorded nowhere in the diff, and work blocked
+on a decision the code cannot express.
 
 ## Fixture honesty
 

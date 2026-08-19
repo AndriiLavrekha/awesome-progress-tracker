@@ -1,0 +1,17 @@
+{
+  "correctNextAction": [
+    "^Edit docs/decisions\\.md$",
+    "deprecat",
+    "record.{0,20}decision"
+  ],
+  "mustTouch": [],
+  "mustNotTouch": [
+    "src/handlers/legacy.ts",
+    "src/handlers/import.ts"
+  ],
+  "alreadyDone": [
+    "implement\\s+parseconfigv2",
+    "write\\s+parseconfigv2",
+    "add\\s+parseconfigv2\\s+to\\s+config"
+  ]
+}
