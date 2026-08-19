@@ -205,7 +205,10 @@ export async function resolveProject(selector: string): Promise<ProjectResolutio
     return { error: "project not found", suggestions };
   }
   if (candidates.length > 1) {
-    const paths = candidates.map((project) => project.path || project.progressPath).join(", ");
+    // The progressPath, not the project directory: a worktree checkout puts a
+    // second Progress.md under one project, so listing directories would print
+    // the same string twice and tell the caller nothing about how to pick one.
+    const paths = candidates.map((project) => project.progressPath || project.path).join(", ");
     return {
       error: `ambiguous project selector "${selector}" matches ${candidates.length} projects: ${paths}. Pass an exact path instead.`
     };

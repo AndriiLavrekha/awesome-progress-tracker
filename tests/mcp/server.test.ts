@@ -420,3 +420,32 @@ describe("conflictPayload", () => {
     expect(payload.currentContent).toBeUndefined();
   });
 });
+
+describe("ambiguity reporting", () => {
+  it("distinguishes candidates that share one project directory", async () => {
+    // A worktree checkout puts a second Progress.md under the same project.
+    // Listing the project directory would print the same string twice and
+    // tell the caller nothing about how to pick one.
+    await withIndex(
+      [
+        indexSummary({
+          project: "Dup",
+          progressPath: "C:/repo/.worktrees/wt/project-progress/Progress.md",
+          path: "C:/repo"
+        }),
+        indexSummary({
+          project: "Dup",
+          progressPath: "C:/repo/project-progress/Progress.md",
+          path: "C:/repo"
+        })
+      ],
+      async () => {
+        const resolution = await resolveProject("Dup");
+
+        expect(resolution.error).toContain("ambiguous");
+        expect(resolution.error).toContain("C:/repo/.worktrees/wt/project-progress/Progress.md");
+        expect(resolution.error).toContain("C:/repo/project-progress/Progress.md");
+      }
+    );
+  });
+});

@@ -92,3 +92,36 @@ Waiting.
     expect(summary.commitProgress).toBe(false);
   });
 });
+
+describe("parseProjectSummary path reconciliation", () => {
+  const STALE = [
+    "---",
+    "project: Demo",
+    "path: C:/old/location",
+    "---",
+    "",
+    "## Next Action",
+    "",
+    "Continue.",
+    ""
+  ].join("\n");
+
+  it("derives path from progressPath rather than trusting stale frontmatter", () => {
+    const summary = parseProjectSummary(STALE, "D:/depot/repo/project-progress/Progress.md");
+
+    expect(summary.path).toBe("D:/depot/repo");
+  });
+
+  it("normalizes separators in the derived path", () => {
+    const summary = parseProjectSummary(
+      STALE,
+      "D:\\depot\\repo\\project-progress\\Progress.md"
+    );
+
+    expect(summary.path).toBe("D:/depot/repo");
+  });
+
+  it("falls back to the frontmatter path when no progressPath is known", () => {
+    expect(parseProjectSummary(STALE).path).toBe("C:/old/location");
+  });
+});
