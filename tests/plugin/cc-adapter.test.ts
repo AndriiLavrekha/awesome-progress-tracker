@@ -612,3 +612,45 @@ describe("cc-adapter session-start drift", () => {
     });
   });
 });
+
+describe("cc-adapter body-hash freshness", () => {
+  it("blocks a stop when only frontmatter changed since session start", async () => {
+    await withTrackerHome(async () => {
+      const dir = await makeRepo();
+      const file = await writeProgress(dir, progressDoc({ project: "BodyHash" }));
+      await commitAll(dir, "init");
+      await fs.writeFile(path.join(dir, "src.txt"), "work", "utf-8");
+
+      const sessionId = `s-body-${Date.now()}`;
+      await handleSessionStart({ cwd: dir, session_id: sessionId });
+
+      // A frontmatter-only edit must NOT satisfy the gate.
+      const current = await fs.readFile(file, "utf-8");
+      await fs.writeFile(file, current.replace("status: active", "status: paused"), "utf-8");
+
+      const result = await handleStop({ cwd: dir, session_id: sessionId });
+
+      expect(result.code).toBe(2);
+      expect(result.stderr).toContain("was not updated this session");
+    });
+  });
+
+  it("allows a stop when a section body changed", async () => {
+    await withTrackerHome(async () => {
+      const dir = await makeRepo();
+      const file = await writeProgress(dir, progressDoc({ project: "BodyHash2" }));
+      await commitAll(dir, "init");
+      await fs.writeFile(path.join(dir, "src.txt"), "work", "utf-8");
+
+      const sessionId = `s-body2-${Date.now()}`;
+      await handleSessionStart({ cwd: dir, session_id: sessionId });
+
+      const current = await fs.readFile(file, "utf-8");
+      await fs.writeFile(file, current.replace("Wire the widget.", "Ship the widget."), "utf-8");
+
+      const result = await handleStop({ cwd: dir, session_id: sessionId });
+
+      expect(result.code).toBe(0);
+    });
+  });
+});

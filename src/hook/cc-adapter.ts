@@ -2,6 +2,7 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { bodyHash } from "../hash.js";
 import { extractSection, parseFrontmatter } from "../mcp/markdown.js";
 import { replaceFrontmatterValue, writeFileAtomic } from "../mcp/writer.js";
 import { readProjectTrackingState, setProjectTrackingState } from "../project-state.js";
@@ -59,6 +60,7 @@ interface SessionState {
   cwd?: string;
   editReminderShown?: boolean;
   stopBlocked?: boolean;
+  bodyHash?: string;
 }
 
 async function readSessionState(sessionId: string | undefined): Promise<SessionState> {
@@ -85,10 +87,14 @@ async function recordSessionStart(sessionId: string | undefined, cwd: string): P
   }
 }
 
-async function readSessionStartMs(sessionId: string | undefined): Promise<number | null> {
-  const state = await readSessionState(sessionId);
-  const ms = state.startedAt ? Date.parse(state.startedAt) : NaN;
-  return Number.isNaN(ms) ? null : ms;
+async function bestEffortRecordBodyHash(sessionId: string | undefined, markdown: string): Promise<void> {
+  if (!sessionId) return;
+  try {
+    const state = await readSessionState(sessionId);
+    await writeSessionState(sessionId, { ...state, bodyHash: bodyHash(markdown) });
+  } catch {
+    // best effort only
+  }
 }
 
 async function bestEffortSetProjectState(cwd: string, state: "initialized"): Promise<void> {
@@ -194,6 +200,7 @@ export async function handleSessionStart(event: HookEvent): Promise<HookResult> 
   await bestEffortSetProjectState(cwd, "initialized");
 
   const markdown = await fs.readFile(progressPath, "utf-8");
+  await bestEffortRecordBodyHash(event.session_id, markdown);
   const frontmatter = parseFrontmatter(markdown);
 
   const lines: string[] = [
@@ -324,13 +331,15 @@ export async function handleStop(event: HookEvent, options: HandleStopOptions = 
   const warnings: string[] = [];
 
   let stale = true;
-  const startedAt = await readSessionStartMs(event.session_id);
-  if (startedAt !== null) {
+  const sessionState = await readSessionState(event.session_id);
+  const startedAt = sessionState.startedAt ? Date.parse(sessionState.startedAt) : NaN;
+  if (Number.isFinite(startedAt)) {
     try {
       const freshness = await checkFreshness(progressPath, {
         meaningfulWorkHappened: true,
         sessionStartedAt: new Date(startedAt),
-        completionBoundary: true
+        completionBoundary: true,
+        sessionBodyHash: sessionState.bodyHash
       });
       stale = !freshness.isFresh;
     } catch {
