@@ -88,10 +88,54 @@ describe("scoreTranscript", () => {
   it("reports totals for an empty transcript", () => {
     expect(scoreTranscript([], expectations)).toEqual({
       tokensToCorrectNextAction: null,
+      stepsToCorrectNextAction: null,
+      totalSteps: 0,
       reachedCorrectAction: false,
       duplicateWorkCount: 0,
       wrongFileTouches: 0,
       totalTokens: 0
     });
+  });
+});
+
+describe("scoreTranscript step counts", () => {
+  it("counts steps through the first correct action", () => {
+    const events = [
+      assistant("Reading the code", 18000),
+      assistant("Looking around", 200),
+      assistant("I will wire foldDoneSection", 300)
+    ];
+
+    expect(scoreTranscript(events, expectations).stepsToCorrectNextAction).toBe(3);
+  });
+
+  it("reports total steps regardless of whether the action was reached", () => {
+    const events = [assistant("unrelated", 10), assistant("also unrelated", 10)];
+
+    const result = scoreTranscript(events, expectations);
+
+    expect(result.totalSteps).toBe(2);
+    expect(result.stepsToCorrectNextAction).toBeNull();
+  });
+
+  it("separates directness from cost when a fixed startup dominates tokens", () => {
+    // Session startup charges prompt-cache creation to the first step, a
+    // constant of the same size in every condition. It swamps the token
+    // difference between a direct run and a wandering one, which the step
+    // count still shows.
+    const direct = [assistant("boot", 18000), assistant("wire foldDoneSection", 500)];
+    const wandering = [
+      assistant("boot", 18000),
+      assistant("hmm", 100),
+      assistant("hmm again", 100),
+      assistant("wire foldDoneSection", 100)
+    ];
+
+    const a = scoreTranscript(direct, expectations);
+    const b = scoreTranscript(wandering, expectations);
+
+    expect(a.stepsToCorrectNextAction).toBe(2);
+    expect(b.stepsToCorrectNextAction).toBe(4);
+    expect(a.tokensToCorrectNextAction).toBeGreaterThan(b.tokensToCorrectNextAction as number);
   });
 });

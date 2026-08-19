@@ -104,6 +104,7 @@ async function runScore(argv: string[]): Promise<number> {
     [
       `scenario:              ${id}`,
       `tokens-to-correct:     ${tokens}`,
+      `steps-to-correct:      ${score.stepsToCorrectNextAction ?? "never reached"} of ${score.totalSteps}`,
       `duplicate-work:        ${score.duplicateWorkCount}`,
       `wrong-file-touches:    ${score.wrongFileTouches}`,
       `total-tokens:          ${score.totalTokens}`,

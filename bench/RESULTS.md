@@ -41,14 +41,21 @@ The agent driven for a run must not have seen the fixture or its
 `expected.json`. An agent that helped build the harness knows the answer key,
 and its score measures recall rather than resumption.
 
-Three metrics are reported. `tokens-to-correct` is cumulative tokens through
+Four metrics are reported. `tokens-to-correct` is cumulative tokens through
 the first action matching the scenario's `correctNextAction` matchers, or
 "never reached". `duplicate-work` counts actions that reimplement something the
 frozen repository already contains. `wrong-file-touches` counts edits to files
 the scenario forbids or does not list.
 
-Wall-clock time and step counts are deliberately not measured: both are
-dominated by model latency and sampling variance rather than resume quality.
+`steps-to-correct` is how many transcript events it took to get there. A
+session charges prompt-cache creation for the whole system prompt to its first
+step — roughly 18,000 tokens in the runs below, within 200 tokens across
+conditions — which dwarfs the difference being measured. The step count
+survives that constant. It is not the step count ADR 0021 excludes: that
+exclusion is about speed, and this is about directness.
+
+Wall-clock time is still not measured. It is dominated by model latency and
+sampling variance rather than resume quality.
 
 ## Scenarios
 
@@ -77,11 +84,41 @@ well it resumed, and the deny list carries the whole signal.
 
 ## Results
 
-No valid runs recorded yet. Populate this table by running each scenario under
-each condition and pasting the scores.
+Run on 2026-08-20, Claude Opus 5 via Claude Code, one session per condition,
+no steering and no answered questions.
 
-| scenario | condition | tokens-to-correct | duplicate-work | wrong-file-touches |
-|----------|-----------|-------------------|----------------|--------------------|
+| scenario | condition | tokens-to-correct | steps-to-correct | duplicate-work | wrong-file-touches | total tokens |
+|----------|-----------|-------------------|------------------|----------------|--------------------|--------------|
+| 01-interrupted-refactor | baseline | 30279 | 11 of 14 | 0 | 0 | 31659 |
+| 01-interrupted-refactor | tracker | 31635 | 9 of 14 | 0 | 0 | 35861 |
+
+### What this shows, and what it does not
+
+Both conditions reached the correct action, neither redid finished work, and
+neither touched `src/writer.ts`. The tracker run got there in 9 steps against
+11, and spent 1,356 more tokens doing it, plus 4,202 more overall — the cost of
+reading `Progress.md` and writing it back.
+
+**This scenario does not measure resumption, and its numbers should not be
+quoted as evidence that the tracker helps.** The fixture is two files in which
+a finished `foldDoneSection` is imported and never called. The unused import
+is a giveaway: the baseline agent read both files and inferred the task
+immediately, without needing a resume note. A two-step advantage on a task the
+baseline solves unaided is not a resumption signal, and the honesty rule below
+applies to it.
+
+What the run did establish is that the harness works end to end, and that the
+tracker's overhead on a trivial task is real and measurable: about 4,000 tokens
+to read and maintain a resume note that saved two steps.
+
+### Next scenario
+
+A scenario that measures resumption needs a next action that cannot be
+recovered from the code, because several next steps are equally defensible and
+only the resume note says which one was chosen and why. Candidates: a partly
+migrated call site where the remaining sites are deliberate exceptions; a
+refactor abandoned mid-way for a reason recorded nowhere in the diff; work
+blocked on a decision that the code cannot express.
 
 ## Fixture honesty
 
