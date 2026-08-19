@@ -310,6 +310,29 @@ describe("cc-adapter stop reminder", () => {
   });
 });
 
+// Mirrors sessionStatePath()'s sanitization in src/hook/cc-adapter.ts (not
+// exported). Used only to let tests read/rewrite session state directly, to
+// simulate degraded states (e.g. a missing bodyHash) that the adapter itself
+// never produces through its public entry points.
+function sessionStatePathFor(sessionId: string): string {
+  const safe = sessionId.replace(/[^A-Za-z0-9_-]/g, "_");
+  return path.join(os.tmpdir(), "awesome-progress-tracker", "sessions", `${safe}.json`);
+}
+
+async function dropSessionBodyHash(sessionId: string): Promise<string> {
+  const statePath = sessionStatePathFor(sessionId);
+  const state = JSON.parse(await fs.readFile(statePath, "utf-8")) as {
+    startedAt?: string;
+    bodyHash?: string;
+    [key: string]: unknown;
+  };
+  const startedAt = state.startedAt;
+  if (!startedAt) throw new Error("expected startedAt to be recorded by handleSessionStart");
+  delete state.bodyHash;
+  await fs.writeFile(statePath, JSON.stringify(state), "utf-8");
+  return startedAt;
+}
+
 async function commitAll(dir: string, message: string): Promise<string> {
   execFileSync("git", ["add", "."], { cwd: dir, stdio: "ignore" });
   execFileSync("git", ["commit", "-q", "-m", message], { cwd: dir, stdio: "ignore" });
@@ -651,6 +674,80 @@ describe("cc-adapter body-hash freshness", () => {
       const result = await handleStop({ cwd: dir, session_id: sessionId });
 
       expect(result.code).toBe(0);
+    });
+  });
+
+  it("falls back to mtime and still blocks when session bodyHash is unavailable and the file is untouched", async () => {
+    await withTrackerHome(async () => {
+      const dir = await makeRepo();
+      const file = await writeProgress(dir, progressDoc({ project: "BodyHashFallbackBlock" }));
+      await commitAll(dir, "init");
+      await fs.writeFile(path.join(dir, "src.txt"), "work", "utf-8");
+
+      const sessionId = `s-fallback-block-${Date.now()}`;
+      await handleSessionStart({ cwd: dir, session_id: sessionId });
+      const startedAt = await dropSessionBodyHash(sessionId);
+
+      // Body genuinely unchanged; force mtime to predate session start so the
+      // mtime fallback (not the hash path, which is now unavailable) is what
+      // decides freshness.
+      const past = new Date(Date.parse(startedAt) - 60_000);
+      await fs.utimes(file, past, past);
+
+      const result = await handleStop({ cwd: dir, session_id: sessionId });
+
+      expect(result.code).toBe(2);
+      expect(result.stderr).toContain("was not updated this session");
+    });
+  });
+
+  it("falls back to mtime and allows a stop when session bodyHash is unavailable but the file was modified after session start", async () => {
+    await withTrackerHome(async () => {
+      const dir = await makeRepo();
+      const file = await writeProgress(dir, progressDoc({ project: "BodyHashFallbackAllow" }));
+      await commitAll(dir, "init");
+      await fs.writeFile(path.join(dir, "src.txt"), "work", "utf-8");
+
+      const sessionId = `s-fallback-allow-${Date.now()}`;
+      await handleSessionStart({ cwd: dir, session_id: sessionId });
+      const startedAt = await dropSessionBodyHash(sessionId);
+
+      const current = await fs.readFile(file, "utf-8");
+      await fs.writeFile(file, current.replace("Wire the widget.", "Ship the widget."), "utf-8");
+      const future = new Date(Date.parse(startedAt) + 60_000);
+      await fs.utimes(file, future, future);
+
+      const result = await handleStop({ cwd: dir, session_id: sessionId });
+
+      expect(result.code).toBe(0);
+    });
+  });
+
+  it("blocks once per session then degrades to an advisory systemMessage on the next stop", async () => {
+    await withTrackerHome(async () => {
+      const dir = await makeRepo();
+      const file = await writeProgress(dir, progressDoc({ project: "OnceCap" }));
+      await commitAll(dir, "init");
+      await fs.writeFile(path.join(dir, "src.txt"), "work", "utf-8");
+
+      const sessionId = `s-once-cap-${Date.now()}`;
+      await handleSessionStart({ cwd: dir, session_id: sessionId });
+
+      const current = await fs.readFile(file, "utf-8");
+      await fs.writeFile(file, current.replace("status: active", "status: paused"), "utf-8");
+
+      const first = await handleStop({ cwd: dir, session_id: sessionId });
+      expect(first.code).toBe(2);
+      expect(first.stderr).toContain("was not updated this session");
+
+      // ADR 0017's fail-closed gate blocks once per session (via stopBlocked),
+      // then degrades to advisory so a session that genuinely cannot update
+      // Progress.md is not wedged forever.
+      const second = await handleStop({ cwd: dir, session_id: sessionId });
+      expect(second.code).toBe(0);
+      expect(second.stderr).toBeUndefined();
+      const message = JSON.parse(second.stdout!).systemMessage as string;
+      expect(message).toContain("was not updated this session");
     });
   });
 });
