@@ -3,7 +3,16 @@ import { execFileSync } from "node:child_process";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { readCheckpoint } from "../../src/hook/checkpoint.js";
+import { readCheckpoint, type GitRunner } from "../../src/hook/checkpoint.js";
+
+function stubGit(responses: Record<string, string | null>) {
+  const calls: Array<{ cwd: string; args: string[] }> = [];
+  const git: GitRunner = (cwd, args) => {
+    calls.push({ cwd, args });
+    return responses[args.join(" ")] ?? null;
+  };
+  return { git, calls };
+}
 
 async function makeRepo(): Promise<string> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "pp-ckpt-"));
@@ -54,5 +63,75 @@ describe("readCheckpoint", () => {
     execFileSync("git", ["checkout", "-q", sha], { cwd: dir, stdio: "ignore" });
 
     expect(readCheckpoint(dir, new Date())!.base_branch).toBe("(detached)");
+  });
+
+  it("sends the exact expected argument arrays, with cwd passed through unchanged", () => {
+    const cwd = "/some/repo";
+    const { git, calls } = stubGit({
+      "rev-parse HEAD": "deadbeef",
+      "status --porcelain": "",
+      "rev-parse --abbrev-ref HEAD": "main"
+    });
+
+    readCheckpoint(cwd, new Date(), git);
+
+    const argLists = calls.map((c) => c.args);
+    expect(argLists).toContainEqual(["rev-parse", "HEAD"]);
+    expect(argLists).toContainEqual(["status", "--porcelain"]);
+    expect(argLists).toContainEqual(["rev-parse", "--abbrev-ref", "HEAD"]);
+    for (const call of calls) {
+      expect(call.cwd).toBe(cwd);
+    }
+  });
+
+  it("treats an empty status string as a clean worktree", () => {
+    const { git } = stubGit({
+      "rev-parse HEAD": "deadbeef",
+      "status --porcelain": "",
+      "rev-parse --abbrev-ref HEAD": "main"
+    });
+
+    expect(readCheckpoint("/repo", new Date(), git)!.worktree_dirty).toBe(false);
+  });
+
+  it("treats a null status result as a clean worktree", () => {
+    const { git } = stubGit({
+      "rev-parse HEAD": "deadbeef",
+      "status --porcelain": null,
+      "rev-parse --abbrev-ref HEAD": "main"
+    });
+
+    expect(readCheckpoint("/repo", new Date(), git)!.worktree_dirty).toBe(false);
+  });
+
+  it("treats non-empty status output as a dirty worktree", () => {
+    const { git } = stubGit({
+      "rev-parse HEAD": "deadbeef",
+      "status --porcelain": " M src/a.ts\n",
+      "rev-parse --abbrev-ref HEAD": "main"
+    });
+
+    expect(readCheckpoint("/repo", new Date(), git)!.worktree_dirty).toBe(true);
+  });
+
+  it("short-circuits when rev-parse HEAD fails, without calling status", () => {
+    const { git, calls } = stubGit({
+      "rev-parse HEAD": null
+    });
+
+    const result = readCheckpoint("/repo", new Date(), git);
+
+    expect(result).toBeNull();
+    expect(calls.some((c) => c.args.join(" ") === "status --porcelain")).toBe(false);
+  });
+
+  it("returns null for a cwd that does not exist", async () => {
+    const dir = path.join(os.tmpdir(), "pp-ckpt-does-not-exist-" + Date.now());
+    expect(readCheckpoint(dir, new Date())).toBeNull();
+  });
+
+  it("returns null for a repository with zero commits", async () => {
+    const dir = await makeRepo();
+    expect(readCheckpoint(dir, new Date())).toBeNull();
   });
 });
