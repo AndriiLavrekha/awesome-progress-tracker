@@ -5,7 +5,7 @@ status: in_progress
 path: C:/Users/nkinc/Documents/progress-tracker
 agent_last_used: claude
 updated: 2026-08-19
-last_milestone: Plans A and B complete: checkpoint validation, gates, and session handoff shipped
+last_milestone: Plan C complete: content-hash write guard, mergeable conflicts, per-path write serialization
 deployed: true
 deployment_url: https://github.com/AndriiLavrekha/awesome-progress-tracker/releases/tag/v0.2.3
 sensitivity: normal
@@ -16,12 +16,16 @@ commit_progress: true
 
 ## Resume Snapshot
 
-Fixed two token/context-loss gaps in the tracker itself (dogfooded on this repo's own `project-progress/`), both unreleased on `main` (not yet tagged).
+Plan C (concurrency hardening) shipped on `feat/resume-hardening`, 5 commits `d095d23`..`795dc8a`. Suite 241 -> 250 passing; typecheck and build green.
 
-1. **Progress.md unbounded growth (ADR 0016).** `update_project_progress`'s `Done` section now auto-folds: when submitted content exceeds `FOLD_THRESHOLD` (2800 chars), the oldest lines move into a new `Archive.md` (new template file, auto-copied by `init`) and only the newest lines stay in `Progress.md`. `foldDoneSection`/`appendToArchive` added to `src/mcp/writer.ts`, wired into `update_project_progress` in `src/mcp/server.ts` (response now reports `archived: N`). SKILL.md now states `Resume Snapshot`/`Last Session` are replace-wholesale fields, not append targets — old narrative belongs in dated `Session Log.md` entries.
-2. **Stop hook never enforced staleness (ADR 0017).** `handleStop` previously always returned `code: 0` (advisory-only), so a session could do real work and end without ever updating `Progress.md`. `handleStop` now reuses `checkFreshness` and, on Claude Code, hard-blocks the first stale Stop via `code: 2` + stderr (Claude Code's documented Stop-block mechanism), capped to once per session via a new `stopBlocked` session-state flag so it can't loop forever. Codex is kept on a new `stop-soft` subcommand (`{ allowBlock: false }`, same soft `systemMessage` as before) until Codex's exit-code-2 semantics for its Stop-equivalent hook are manually verified — same gate pattern as ADR 0002/0015.
+`writeFileAtomic` now takes `expectedHash: string` instead of `expectedMtimeMs: number`, compares a SHA-256 of the file's full content, and throws a typed `ProgressConflictError` carrying `filePath`. All five call sites migrated in one commit: three MCP handlers in `src/mcp/server.ts`, plus `bestEffortMarkHandoff` and `bestEffortRecordSessionEnd` in `src/hook/cc-adapter.ts`. The two hook writers keep swallowing the throw, which stays correct: losing a stamp is the right outcome when another writer's content is newer.
 
-Verification: full suite 123/123 passing, typecheck clean, build clean. Manual smoke: real `init` creates `Archive.md`; a scripted fold run moved 20/200 synthetic Done items into `Archive.md` correctly.
+Two deviations from the plan text, both recorded in ADR 0020.
+
+1. `conflictResult` does NOT route through `textResult` as the plan specified. `textResult` collapses any payload with a string `error` into `errorResult("invalid_request", ...)`, which would have discarded `currentContent` and `currentFrontmatter` - the whole point of the payload. It builds the MCP result directly, with `isError` still set.
+2. The Task 4 interleaved test failed as written, and the failure was real. The hash closed mtime's resolution window but not the check-then-act window: compare and rename are separated by awaits, so two concurrent in-process writers both passed the compare and the second clobbered the first. Fixed by serializing writes per resolved path with a promise chain (`enqueueWrite` in `src/mcp/writer.ts`). It is a queue, not a lease: no TTL, no renewal, no steal path, cannot outlive its process. Cross-process writers are still ordered only by the compare, so their race is narrowed to the rename rather than closed.
+
+Also: `update_project_progress` appends to `Archive.md` only after the guarded write lands, so a lost race can no longer archive `Done` entries that were never removed from `Progress.md`.
 
 ## Current State
 
@@ -49,7 +53,7 @@ Bug injection is now standard practice for any test claiming to guard an invaria
 
 ## Next Action
 
-Execute plan C, `docs/superpowers/plans/2026-08-19-concurrency-hardening.md`, then plan D. Plan C Task 1 was resequenced during execution: it now migrates all FIVE `writeFileAtomic` call sites in the same commit rather than leaving the tree un-typecheckable between tasks. The two hook call sites keep swallowing the conflict throw permanently, since losing a stamp is correct when another writer's content is newer.
+Execute plan D, `docs/superpowers/plans/2026-08-19-benchmark.md` (7 tasks). Plan C is complete; plans A, B, and C are all shipped on `feat/resume-hardening` and still unreleased.
 
 ## Remaining Work
 
@@ -131,7 +135,9 @@ Execute plan C, `docs/superpowers/plans/2026-08-19-concurrency-hardening.md`, th
 
 ## Blockers
 
-None. Plans A and B are shipped on `feat/resume-hardening`; plans C and D remain. The deferred dirty-tree consequence from plan A was closed by plan B Task 4. The pending ADR 0016/0017 release on `main` is independent and still unreleased. ADR 0015 defines Hermes compatibility as Skill + MCP with lifecycle hooks deferred.
+None blocking plan D.
+
+One tracker bug found while updating this file: this Progress.md's frontmatter `path` still reads `C:/Users/nkinc/Documents/progress-tracker`, the repo's old location. The MCP selector therefore refuses `progress-tracker` as ambiguous and lists the SAME stale path twice, and the real path `D:/depot/awesome-progress-tracker` resolves to "project not found". Two defects behind it: the index admits duplicate entries for one path, and nothing reconciles `path` when a project moves. This section was written by editing the file directly.
 
 ## Deployment
 

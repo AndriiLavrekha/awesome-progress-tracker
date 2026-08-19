@@ -9,3 +9,5 @@ node_modules/
 # dist/ is intentionally committed: Claude Code plugins run from the cloned repo
 # with no build step, so the compiled output under dist/src must be checked in.
 # Run `npm run build` and commit dist/ before releasing.
+
+bench/dist/

@@ -27,6 +27,8 @@
     "test": "vitest run",
     "test:mcp": "vitest run tests/mcp",
     "typecheck": "tsc -p tsconfig.test.json",
+    "bench:build": "tsc -p bench/tsconfig.json",
+    "bench": "npm run bench:build && node bench/dist/harness/cli.js",
     "build": "tsc -p tsconfig.json",
     "build:mcp": "tsc -p tsconfig.json",
     "mcp": "node dist/src/mcp/server.js",
