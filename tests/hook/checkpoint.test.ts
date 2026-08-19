@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { readCheckpoint, type GitRunner } from "../../src/hook/checkpoint.js";
+import { readCheckpoint, resolveDrift, type GitRunner } from "../../src/hook/checkpoint.js";
 
 function stubGit(responses: Record<string, string | null>) {
   const calls: Array<{ cwd: string; args: string[] }> = [];
@@ -133,5 +133,65 @@ describe("readCheckpoint", () => {
   it("returns null for a repository with zero commits", async () => {
     const dir = await makeRepo();
     expect(readCheckpoint(dir, new Date())).toBeNull();
+  });
+});
+
+describe("resolveDrift", () => {
+  it("returns null outside a git repository", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "pp-nogit2-"));
+    expect(resolveDrift(dir, "e".repeat(40))).toBeNull();
+  });
+
+  it("reports no drift when the checkpoint is HEAD", async () => {
+    const dir = await makeRepo();
+    const sha = await commit(dir, "a.txt", "a");
+    expect(resolveDrift(dir, sha)).toEqual({ kind: "none" });
+  });
+
+  it("reports commits behind and changed files for an ancestor checkpoint", async () => {
+    const dir = await makeRepo();
+    const base = await commit(dir, "a.txt", "a");
+    await commit(dir, "b.txt", "b");
+    const head = await commit(dir, "c.txt", "c");
+
+    const status = resolveDrift(dir, base);
+
+    expect(status).toMatchObject({
+      kind: "ahead",
+      commitsBehind: 2,
+      head,
+      branch: "main"
+    });
+    expect((status as { files: string[] }).files.sort()).toEqual(["b.txt", "c.txt"]);
+  });
+
+  it("reports divergence when the checkpoint is on another branch", async () => {
+    const dir = await makeRepo();
+    await commit(dir, "a.txt", "a");
+    execFileSync("git", ["checkout", "-q", "-b", "side"], { cwd: dir, stdio: "ignore" });
+    const side = await commit(dir, "side.txt", "side");
+    execFileSync("git", ["checkout", "-q", "main"], { cwd: dir, stdio: "ignore" });
+    const head = await commit(dir, "main.txt", "main");
+
+    const status = resolveDrift(dir, side);
+
+    expect(status).toMatchObject({
+      kind: "diverged",
+      onlyOnCheckpoint: 1,
+      onlyOnHead: 1,
+      head,
+      branch: "main"
+    });
+    // Compared against the merge base, so only HEAD's own change appears.
+    expect((status as { files: string[] }).files).toEqual(["main.txt"]);
+  });
+
+  it("reports a checkpoint commit that is not in the repository", async () => {
+    const dir = await makeRepo();
+    const head = await commit(dir, "a.txt", "a");
+
+    const status = resolveDrift(dir, "0".repeat(40));
+
+    expect(status).toEqual({ kind: "missing", head, branch: "main" });
   });
 });
