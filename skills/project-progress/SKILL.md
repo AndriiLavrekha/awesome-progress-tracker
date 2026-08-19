@@ -93,6 +93,10 @@ finished but tests were failing, which prose reliably loses.
 If resume context reports checkpoint drift, verify the recorded Next Action
 against the listed changed files before acting on it.
 
+If resume context reports that the previous session ended without a clean
+handoff, inspect the working tree before trusting Next Action: that session did
+work it never wrote down.
+
 ## Completion Rules
 
 Only mark `done` when remaining work is empty, verification is recorded, blockers are none, and `Completion Criteria` is satisfied.
