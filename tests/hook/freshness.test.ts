@@ -120,6 +120,39 @@ describe("checkFreshness with a session body hash", () => {
     expect(result.isFresh).toBe(true);
   });
 
+  // Proves the fallback actually compares mtime rather than always returning
+  // fresh when no hash is supplied: session start is set after the file's
+  // (deliberately aged) mtime, so a correct fallback must report stale.
+  it("reports stale via the mtime fallback when no hash was recorded", async () => {
+    const file = await writeTempProgress(DOC);
+    const old = new Date("2020-01-01T00:00:00Z");
+    await fs.utimes(file, old, old);
+
+    const result = await checkFreshness(file, {
+      meaningfulWorkHappened: true,
+      sessionStartedAt: new Date("2026-01-01T00:00:00Z"),
+      completionBoundary: true
+    });
+
+    expect(result.isFresh).toBe(false);
+    expect(result.shouldWarn).toBe(true);
+    expect(result.shouldBlock).toBe(true);
+  });
+
+  it("warns without blocking when the body is unchanged outside a completion boundary", async () => {
+    const file = await writeTempProgress(DOC);
+
+    const result = await checkFreshness(file, {
+      meaningfulWorkHappened: true,
+      sessionStartedAt: new Date(0),
+      sessionBodyHash: bodyHash(DOC)
+    });
+
+    expect(result.isFresh).toBe(false);
+    expect(result.shouldWarn).toBe(true);
+    expect(result.shouldBlock).toBe(false);
+  });
+
   it("still short-circuits when no meaningful work happened", async () => {
     const file = await writeTempProgress(DOC);
 
