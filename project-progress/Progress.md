@@ -1,4 +1,10 @@
 ---
+checkpoint_at: 2026-08-20T11:45:14Z
+worktree_dirty: true
+base_branch: main
+base_commit: 581a8523ff2b20e24a009bade8fb23de782fc280
+session_id: 01a01ef8-8133-7f82-990d-b28832627444
+handoff: clean
 project: progress-tracker
 progress_schema_version: 1
 status: in_progress
@@ -15,6 +21,8 @@ commit_progress: true
 # Progress Tracker
 
 ## Resume Snapshot
+
+README now places the project logo from `misc/apt-logo.png` between the title and subtitle in the centered hero block. The v0.4.1 release and benchmark state remain unchanged.
 
 Plans A through D are merged to `main`; the branch is now eleven commits ahead of `origin/main`. The literal-path MCP resolution fix is committed as `cd7962e`, scenario 03 as `adcba7b`, and release preparation has bumped package/plugin manifests to `0.4.1`.
 
@@ -42,7 +50,7 @@ Added `RELEASE_NOTES_v0.4.1.md`, reran the full release verification, pushed `ma
 
 ## Next Action
 
-Keep Hermes deferred. Run independent benchmark sessions for scenarios 01 through 03 and record only uncontaminated transcripts/results; the `v0.4.1` release is already published.
+Keep Hermes deferred. Run independent benchmark sessions for scenarios 01 through 03 and record only uncontaminated transcripts/results; the `v0.4.1` release is already published. The README logo update is complete.
 
 ## Remaining Work
 
@@ -125,7 +133,7 @@ Keep Hermes deferred. Run independent benchmark sessions for scenarios 01 throug
 
 ## Blockers
 
-None for the current benchmark and non-Hermes release work. Hermes verification is intentionally deferred at the user's direction; its local CLI hang is not treated as a blocker for this session's next action.
+None for the current benchmark, README, and non-Hermes release work. Hermes verification is intentionally deferred at the user's direction; its local CLI hang is not treated as a blocker for this session's next action.
 
 Two notes on state outside this repository. The global index at `~/.awesome-progress-tracker/projects.json` was refreshed: 51 entries down to 9, pruning the dead worktree entry that made `progress-tracker` ambiguous along with 41 other entries whose `Progress.md` no longer existed. This repository still will not appear in that index until `PROJECT_PROGRESS_ROOTS` includes `D:/depot`; that is configuration, not a defect.
 

@@ -2,6 +2,8 @@
 
 # Awesome Progress Tracker
 
+<img src="misc/apt-logo.png" alt="Awesome Progress Tracker logo" width="180">
+
 ### Resumable memory for Codex, Claude Code, and any MCP-compatible agent.
 
 Project-local Markdown that survives context resets — so your agent picks up exactly where it left off, every session, in one file it can read in a few hundred tokens.
