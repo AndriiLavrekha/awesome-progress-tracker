@@ -240,6 +240,50 @@ describe("MCP server tools", () => {
     );
   });
 
+  it("resolves a Progress.md outside PROJECT_PROGRESS_ROOTS when the caller names its exact path", async () => {
+    await withIndex([], async () => {
+      const projectDir = await fs.mkdtemp(path.join(os.tmpdir(), "project-progress-outside-root-"));
+      const progressDir = path.join(projectDir, "project-progress");
+      await fs.mkdir(progressDir, { recursive: true });
+      const progressPath = path.join(progressDir, "Progress.md");
+      await fs.writeFile(
+        progressPath,
+        [
+          "---",
+          "project: Outside Root",
+          "status: active",
+          "updated: 2026-06-27",
+          "---",
+          "",
+          "## Resume Snapshot",
+          "",
+          "Fresh checkout, never scanned.",
+          "",
+          "## Next Action",
+          "",
+          "Do the thing.",
+          "",
+          "## Blockers",
+          "",
+          "None."
+        ].join("\n"),
+        "utf-8"
+      );
+
+      try {
+        const byProjectDir = await resolveProject(projectDir);
+        expect(byProjectDir.error).toBeUndefined();
+        expect(byProjectDir.project?.project).toBe("Outside Root");
+
+        const byExactFile = await resolveProject(progressPath);
+        expect(byExactFile.error).toBeUndefined();
+        expect(byExactFile.project?.nextAction).toBe("Do the thing.");
+      } finally {
+        await fs.rm(projectDir, { recursive: true, force: true });
+      }
+    });
+  });
+
   it("returns bounded selector suggestions when a project is not found", async () => {
     await withIndex([indexSummary({ project: "Solo" })], async () => {
       const resolution = await resolveProject("sol");

@@ -112,6 +112,31 @@ function matchesSelector(project, selector) {
 function dedupeByProgressPath(projects) {
     return [...new Map(projects.map((project) => [project.progressPath, project])).values()];
 }
+// A selector naming a Progress.md, its project-progress directory, or its project directory,
+// tried directly on disk. Unlike root scanning (which stays opt-in via PROJECT_PROGRESS_ROOTS
+// so an unconfigured server never silently reads the launch cwd), this only ever touches the
+// exact path the caller typed — it can't surface anything the caller didn't already name.
+async function resolveLiteralProgressPath(selector) {
+    const base = path.resolve(selector);
+    const candidates = [
+        base,
+        path.join(base, "project-progress", "Progress.md"),
+        path.join(base, "Progress.md")
+    ];
+    for (const candidate of candidates) {
+        if (path.basename(candidate) !== "Progress.md")
+            continue;
+        try {
+            const stat = await fs.stat(candidate);
+            if (stat.isFile())
+                return candidate;
+        }
+        catch {
+            // not present at this candidate, try the next
+        }
+    }
+    return undefined;
+}
 // Resolve a project by exact name, path, or progressPath. Names are not unique, so an
 // ambiguous selector returns an error listing candidate paths instead of silently editing
 // whichever entry happened to be found first.
@@ -124,6 +149,18 @@ export async function resolveProject(selector) {
             exclude: DEFAULT_EXCLUDES
         });
         candidates = dedupeByProgressPath(discovered.filter((project) => matchesSelector(project, selector)));
+    }
+    // Checkouts outside PROJECT_PROGRESS_ROOTS (a fresh clone, a benchmark fixture, a temp
+    // worktree) are invisible to root scanning by design. If the caller named an exact path to
+    // one, honor it directly instead of forcing a re-install just to move Progress.md.
+    if (candidates.length === 0) {
+        const literalPath = await resolveLiteralProgressPath(selector);
+        if (literalPath) {
+            const markdown = await fs.readFile(literalPath, "utf-8");
+            const project = parseProjectSummary(markdown, literalPath);
+            await upsertIndexedProject(project);
+            candidates = [project];
+        }
     }
     if (candidates.length === 0) {
         const normalized = selector.toLowerCase();
