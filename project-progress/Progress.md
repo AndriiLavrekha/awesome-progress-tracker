@@ -42,7 +42,7 @@ Committed ADR 0023 as `cd7962e` and scenario 03 as `adcba7b`. Scenario 03 has a 
 
 ## Next Action
 
-Run the full release verification, resolve the remaining Hermes checklist items that are required for the supported package surface, then prepare the unreleased package/plugin tag. Independent benchmark agent runs can follow separately; scenario 03 is ready for them and must not be scored from an agent that helped build it.
+Keep Hermes deferred. Run independent benchmark sessions for scenarios 01 through 03 and record only uncontaminated transcripts/results; then continue the non-Hermes package/plugin release preparation. The installed Hermes CLI issue remains noted for a later session.
 
 ## Remaining Work
 
@@ -125,7 +125,7 @@ Run the full release verification, resolve the remaining Hermes checklist items 
 
 ## Blockers
 
-The release checklist still requires disposable Hermes verification. The installed `hermes.exe` is present but `hermes --version` did not return within the bounded probe, so the Hermes-specific release checks cannot yet be claimed. This is an environment/tooling blocker, not a code-test failure.
+None for the current benchmark and non-Hermes release work. Hermes verification is intentionally deferred at the user's direction; its local CLI hang is not treated as a blocker for this session's next action.
 
 Two notes on state outside this repository. The global index at `~/.awesome-progress-tracker/projects.json` was refreshed: 51 entries down to 9, pruning the dead worktree entry that made `progress-tracker` ambiguous along with 41 other entries whose `Progress.md` no longer existed. This repository still will not appear in that index until `PROJECT_PROGRESS_ROOTS` includes `D:/depot`; that is configuration, not a defect.
 
