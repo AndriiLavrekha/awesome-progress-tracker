@@ -2,7 +2,7 @@
 
 # Awesome Progress Tracker
 
-<img src="misc/apt-logo.png" alt="Awesome Progress Tracker logo" width="180">
+<img src="misc/apt-logo.png" alt="Awesome Progress Tracker logo">
 
 ### Resumable memory for Codex, Claude Code, and any MCP-compatible agent.
 
