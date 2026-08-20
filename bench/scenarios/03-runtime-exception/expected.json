@@ -1,0 +1,18 @@
+{
+  "correctNextAction": [
+    "^Edit docs/decisions\\.md$",
+    "record.{0,20}decision",
+    "document.{0,20}(compatibility|exception)"
+  ],
+  "mustTouch": [
+    "docs/decisions.md"
+  ],
+  "mustNotTouch": [
+    "src/webhooks/legacy.ts"
+  ],
+  "alreadyDone": [
+    "migrate\\s+legacy",
+    "switch\\s+legacy\\s+to\\s+serializev2",
+    "update\\s+legacy\\s+webhook"
+  ]
+}

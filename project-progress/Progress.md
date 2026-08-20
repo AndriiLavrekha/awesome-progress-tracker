@@ -4,7 +4,7 @@ progress_schema_version: 1
 status: in_progress
 path: C:/Users/nkinc/Documents/progress-tracker
 agent_last_used: claude
-updated: 2026-08-19
+updated: 2026-08-20
 last_milestone: Plans A-D merged to main and pushed to origin
 deployed: true
 deployment_url: https://github.com/AndriiLavrekha/awesome-progress-tracker/releases/tag/v0.2.3
@@ -16,13 +16,11 @@ commit_progress: true
 
 ## Resume Snapshot
 
-Plans A through D are merged to `main` and pushed to origin (`e7d3f98..870d10b`, 50 commits). `feat/resume-hardening` is also pushed and now tracks origin. Verified on `main` after the merge: 287 tests across 20 files, typecheck, build, and bench:build all green.
+Plans A through D are merged to `main`; the branch is seven commits ahead of `origin/main` after the ADR 0023 fix. The literal-path MCP resolution fix is committed as `cd7962e`, with rebuilt `dist/src/mcp/server.js` and regression coverage.
 
-What shipped: checkpoint validation and gates (plan A), session handoff with body-hash freshness and a progress-aware work predicate (plan B), a content-hash write guard with mergeable conflict payloads and per-path write serialization (plan C), and the resumability benchmark harness under `bench/` (plan D). Plus a fix for stale project-path resolution (ADR 0022). ADRs 0015 through 0022 are all on main.
+Benchmark scenario 03 (`03-runtime-exception`) is now built with a complete repository bundle, tracker overlay, expected scoring contract, and a runtime-only compatibility exception that makes the forbidden migration type-check compatible but incorrect. `bench:build`, all 51 benchmark tests, and both tracker/baseline setup paths pass.
 
-Still UNRELEASED: no tag has been cut. `dist/src` is committed and current.
-
-The benchmark has never been run. `bench/RESULTS.md` carries methodology and an empty results table by design.
+Still UNRELEASED: no new tag has been cut. `dist/src` is committed and current. The benchmark has not yet been run with independent agents, so `bench/RESULTS.md` remains intentionally unfilled.
 
 ## Current State
 
@@ -40,21 +38,11 @@ The approved direction is skill-first and project-local:
 
 ## Last Session
 
-Plans A and B both complete on `feat/resume-hardening`: 15/27 tasks, 31 commits, suite 131 to 241 passing.
-
-Plan B shipped session handoff: `session_id` and `handoff` written pessimistically at SessionStart and cleared at Stop, so a session that dies leaves `interrupted` for the next session to report. Two mechanisms had to change first or the feature would have broken them silently. Freshness moved from file mtime to a hash of the Markdown body (`src/hash.ts`), because SessionStart writing frontmatter every session would otherwise push mtime past session start and disable the ADR 0017 fail-closed gate with every test still green. And the meaningful-work predicate stopped counting `project-progress/` paths, or the tracker's own writes would nag every read-only session. ADR 0019 records both.
-
-Review continued to earn its cost. It found the ADR 0016 comment overclaiming CRLF equivalence for frontmatter-less documents; a freshness fallback test that would have passed even with the fallback deleted; a `shouldBlock` assertion that never proved the value was parameterized; and `porcelainPath` corrupting octal-escaped filenames, now renamed `porcelainPathKey` with its contract stated.
-
-Bug injection is now standard practice for any test claiming to guard an invariant. It caught two inert guards in plan A and confirmed three real ones in plan B: moving the SessionStart write before the file read fails exactly the three handoff-reporting tests, which is what proves the read-before-write ordering is pinned.
+Committed ADR 0023 as `cd7962e` after verifying the MCP literal-path fallback tests, typecheck, and build. Built benchmark scenario 03 around a runtime-only webhook compatibility exception: the tracker condition explains why `src/webhooks/legacy.ts` must remain on `serializeV1`, while the baseline condition has no progress overlay. Verified the bundle, `bench:build`, 51 benchmark tests, and both scenario setup modes. No independent agent transcripts exist yet, so no benchmark result was claimed.
 
 ## Next Action
 
-Two things, in either order.
-
-1. Run the benchmark and fill in `bench/RESULTS.md`. `npm run bench -- setup 01-interrupted-refactor --condition baseline`, then the same with `--condition tracker`; drive an agent in each printed directory with the printed prompt, save a normalized JSONL transcript per run, score both, paste the numbers. This needs an agent with NO knowledge of the fixture or of `expected.json` — an agent that helped build the harness cannot produce an honest number for it. Per the fixture-honesty rule, if both conditions score the same, the scenario is not measuring resumption and gets rewritten rather than reported.
-
-2. Cut a release. Everything on main since `e7d3f98` is unreleased; `RELEASE_CHECKLIST.md` has the steps.
+Run the full release verification, resolve the remaining Hermes checklist items that are required for the supported package surface, then prepare the unreleased package/plugin tag. Independent benchmark agent runs can follow separately; scenario 03 is ready for them and must not be scored from an agent that helped build it.
 
 ## Remaining Work
 
@@ -96,10 +84,11 @@ Two things, in either order.
 - [x] Write four task-by-task implementation plans from those specs.
 - [x] Implement plan A: checkpoint validation and verification gates (ADR 0018).
 - [x] Implement plan B: session handoff and body-hash freshness (ADR 0019).
-- [ ] Implement plan C: content-hash write guard and mergeable conflicts (ADR 0020).
-- [ ] Implement plan D: resumability benchmark harness and first fixture (ADR 0021).
-- [ ] Document git + `Session Log.md` as the existing checkpoint-history answer in README (rejects a separate journal).
-- [ ] Fix the stale `path:` frontmatter value — it points at `C:/Users/nkinc/Documents/progress-tracker` but this repo is checked out at `D:/depot/awesome-progress-tracker`.
+- [x] Implement plan C: content-hash write guard and mergeable conflicts (ADR 0020).
+- [x] Implement plan D: resumability benchmark harness and first fixtures (ADR 0021).
+- [x] Document git + `Session Log.md` as the existing checkpoint-history answer in README (rejects a separate journal).
+- [x] Fix the stale `path:` frontmatter value — it points at `C:/Users/nkinc/Documents/progress-tracker` but this repo is checked out at `D:/depot/awesome-progress-tracker`.
+- [x] Build benchmark scenario 03 with a runtime-only exception that exercises `mustNotTouch` honestly.
 
 ## Done
 
