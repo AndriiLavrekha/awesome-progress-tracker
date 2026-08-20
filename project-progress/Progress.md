@@ -5,9 +5,9 @@ status: in_progress
 path: C:/Users/nkinc/Documents/progress-tracker
 agent_last_used: claude
 updated: 2026-08-20
-last_milestone: Plans A-D merged to main and pushed to origin
+last_milestone: v0.4.1 published to GitHub
 deployed: true
-deployment_url: https://github.com/AndriiLavrekha/awesome-progress-tracker/releases/tag/v0.2.3
+deployment_url: https://github.com/AndriiLavrekha/awesome-progress-tracker/releases/tag/v0.4.1
 sensitivity: normal
 commit_progress: true
 ---
@@ -20,7 +20,7 @@ Plans A through D are merged to `main`; the branch is now eleven commits ahead o
 
 Benchmark scenario 03 (`03-runtime-exception`) is now built with a complete repository bundle, tracker overlay, expected scoring contract, and a runtime-only compatibility exception that makes the forbidden migration type-check compatible but incorrect. `bench:build`, all 51 benchmark tests, and both tracker/baseline setup paths pass.
 
-Still UNRELEASED: no `v0.4.1` tag has been cut. `dist/src` is committed and current. The benchmark has not yet been run with independent agents, so `bench/RESULTS.md` remains intentionally unfilled.
+`v0.4.1` is published at the GitHub release URL above. `dist/src` is committed and current. The benchmark has not yet been run with independent agents, so `bench/RESULTS.md` remains intentionally unfilled.
 
 ## Current State
 
@@ -38,11 +38,11 @@ The approved direction is skill-first and project-local:
 
 ## Last Session
 
-Prepared the next patch release as `0.4.1` across `package.json`, Claude/Codex plugin manifests, marketplace metadata, and the README badge. The version bump exposed three stale `v0.4.0` URL assertions; they now derive the expected URL from `package.json`. Focused CLI tests (30), full suite (306), typecheck, build, benchmark build, package dry-run, and diff-check all pass. Hermes remains deferred.
+Added `RELEASE_NOTES_v0.4.1.md`, reran the full release verification, pushed `main` through `bbd23f1`, created and pushed annotated tag `v0.4.1`, and published the non-draft, non-prerelease GitHub release. Remote verification confirms the tag and release URL. Hermes remains deferred; independent benchmark runs are still unrecorded.
 
 ## Next Action
 
-Keep Hermes deferred. Run independent benchmark sessions for scenarios 01 through 03 and record only uncontaminated transcripts/results; then obtain authorization to publish the prepared `v0.4.1` tag/release.
+Keep Hermes deferred. Run independent benchmark sessions for scenarios 01 through 03 and record only uncontaminated transcripts/results; the `v0.4.1` release is already published.
 
 ## Remaining Work
 
