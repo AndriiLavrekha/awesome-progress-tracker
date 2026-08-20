@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Project-local Markdown progress tracking for Claude Code, Codex, and MCP-compatible agents.",
-    "version": "0.4.0"
+    "version": "0.4.1"
   },
   "plugins": [
     {

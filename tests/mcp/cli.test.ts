@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import { promises as fs } from "node:fs";
+import { promises as fs, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
@@ -22,6 +22,12 @@ import { readProjectIndex } from "../../src/mcp/index.js";
 import { readProjectTrackingState } from "../../src/project-state.js";
 
 const { spawnMock } = vi.hoisted(() => ({ spawnMock: vi.fn() }));
+
+const expectedSkillUrl =
+  `https://raw.githubusercontent.com/AndriiLavrekha/awesome-progress-tracker/v${
+    (JSON.parse(readFileSync(path.join(process.cwd(), "package.json"), "utf-8")) as { version: string })
+      .version
+  }/skills/project-progress/SKILL.md`;
 
 vi.mock("node:child_process", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:child_process")>();
@@ -260,8 +266,7 @@ describe("npm CLI", () => {
 
   it("installs Hermes managed skill and MCP server with the command runner", async () => {
     const calls: Array<{ command: string; args: string[]; stdin?: string }> = [];
-    const skillUrl =
-      "https://raw.githubusercontent.com/AndriiLavrekha/awesome-progress-tracker/v0.4.0/skills/project-progress/SKILL.md";
+    const skillUrl = expectedSkillUrl;
     let mcpListCount = 0;
     const runner = async (command: string, args: string[], options?: { stdin?: string }) => {
       calls.push({ command, args, stdin: options?.stdin });
@@ -505,7 +510,7 @@ describe("npm CLI", () => {
         args: [
           "skills",
           "install",
-          "https://raw.githubusercontent.com/AndriiLavrekha/awesome-progress-tracker/v0.4.0/skills/project-progress/SKILL.md",
+          expectedSkillUrl,
           "--name",
           "project-progress",
           "--yes"
@@ -575,7 +580,7 @@ describe("npm CLI", () => {
         args: [
           "skills",
           "install",
-          "https://raw.githubusercontent.com/AndriiLavrekha/awesome-progress-tracker/v0.4.0/skills/project-progress/SKILL.md",
+          expectedSkillUrl,
           "--name",
           "project-progress",
           "--yes"

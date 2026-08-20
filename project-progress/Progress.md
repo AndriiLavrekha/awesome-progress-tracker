@@ -16,11 +16,11 @@ commit_progress: true
 
 ## Resume Snapshot
 
-Plans A through D are merged to `main`; the branch is seven commits ahead of `origin/main` after the ADR 0023 fix. The literal-path MCP resolution fix is committed as `cd7962e`, with rebuilt `dist/src/mcp/server.js` and regression coverage.
+Plans A through D are merged to `main`; the branch is now eleven commits ahead of `origin/main`. The literal-path MCP resolution fix is committed as `cd7962e`, scenario 03 as `adcba7b`, and release preparation has bumped package/plugin manifests to `0.4.1`.
 
 Benchmark scenario 03 (`03-runtime-exception`) is now built with a complete repository bundle, tracker overlay, expected scoring contract, and a runtime-only compatibility exception that makes the forbidden migration type-check compatible but incorrect. `bench:build`, all 51 benchmark tests, and both tracker/baseline setup paths pass.
 
-Still UNRELEASED: no new tag has been cut. `dist/src` is committed and current. The benchmark has not yet been run with independent agents, so `bench/RESULTS.md` remains intentionally unfilled.
+Still UNRELEASED: no `v0.4.1` tag has been cut. `dist/src` is committed and current. The benchmark has not yet been run with independent agents, so `bench/RESULTS.md` remains intentionally unfilled.
 
 ## Current State
 
@@ -38,11 +38,11 @@ The approved direction is skill-first and project-local:
 
 ## Last Session
 
-Committed ADR 0023 as `cd7962e` and scenario 03 as `adcba7b`. Scenario 03 has a complete bundle, tracker overlay, expected scoring contract, and runtime-only webhook compatibility exception. Verified the bundle, both setup modes, 51 benchmark tests, the full 306-test suite, typecheck, build, benchmark build, diff-check, and `npm pack --dry-run --ignore-scripts`. No independent agent transcripts exist yet, so no benchmark result was claimed. The installed Hermes CLI was found but did not return from `hermes --version` within the bounded probe.
+Prepared the next patch release as `0.4.1` across `package.json`, Claude/Codex plugin manifests, marketplace metadata, and the README badge. The version bump exposed three stale `v0.4.0` URL assertions; they now derive the expected URL from `package.json`. Focused CLI tests (30), full suite (306), typecheck, build, benchmark build, package dry-run, and diff-check all pass. Hermes remains deferred.
 
 ## Next Action
 
-Keep Hermes deferred. Run independent benchmark sessions for scenarios 01 through 03 and record only uncontaminated transcripts/results; then continue the non-Hermes package/plugin release preparation. The installed Hermes CLI issue remains noted for a later session.
+Keep Hermes deferred. Run independent benchmark sessions for scenarios 01 through 03 and record only uncontaminated transcripts/results; then obtain authorization to publish the prepared `v0.4.1` tag/release.
 
 ## Remaining Work
 
