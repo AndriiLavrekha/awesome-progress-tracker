@@ -38,7 +38,7 @@ The approved direction is skill-first and project-local:
 
 ## Last Session
 
-Committed ADR 0023 as `cd7962e` after verifying the MCP literal-path fallback tests, typecheck, and build. Built benchmark scenario 03 around a runtime-only webhook compatibility exception: the tracker condition explains why `src/webhooks/legacy.ts` must remain on `serializeV1`, while the baseline condition has no progress overlay. Verified the bundle, `bench:build`, 51 benchmark tests, and both scenario setup modes. No independent agent transcripts exist yet, so no benchmark result was claimed.
+Committed ADR 0023 as `cd7962e` and scenario 03 as `adcba7b`. Scenario 03 has a complete bundle, tracker overlay, expected scoring contract, and runtime-only webhook compatibility exception. Verified the bundle, both setup modes, 51 benchmark tests, the full 306-test suite, typecheck, build, benchmark build, diff-check, and `npm pack --dry-run --ignore-scripts`. No independent agent transcripts exist yet, so no benchmark result was claimed. The installed Hermes CLI was found but did not return from `hermes --version` within the bounded probe.
 
 ## Next Action
 
@@ -125,7 +125,7 @@ Run the full release verification, resolve the remaining Hermes checklist items 
 
 ## Blockers
 
-None.
+The release checklist still requires disposable Hermes verification. The installed `hermes.exe` is present but `hermes --version` did not return within the bounded probe, so the Hermes-specific release checks cannot yet be claimed. This is an environment/tooling blocker, not a code-test failure.
 
 Two notes on state outside this repository. The global index at `~/.awesome-progress-tracker/projects.json` was refreshed: 51 entries down to 9, pruning the dead worktree entry that made `progress-tracker` ambiguous along with 41 other entries whose `Progress.md` no longer existed. This repository still will not appear in that index until `PROJECT_PROGRESS_ROOTS` includes `D:/depot`; that is configuration, not a defect.
 
