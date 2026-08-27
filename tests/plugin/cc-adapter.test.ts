@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { handlePreCommit, handlePreEdit, handleSessionStart, handleStop } from "../../src/hook/cc-adapter.js";
+import { handlePreCommit, handlePreEdit, handleSessionStart, handleStop, handleUserPromptSubmit } from "../../src/hook/cc-adapter.js";
 import { parseFrontmatter } from "../../src/mcp/markdown.js";
 import { readProjectTrackingState, setProjectTrackingState } from "../../src/project-state.js";
 
@@ -119,6 +119,34 @@ describe("cc-adapter session-start", () => {
       expect(context).toContain("[truncated]");
       expect(context).toContain("Wire the widget");
       expect(context.length).toBeLessThanOrEqual(1600);
+    });
+  });
+});
+
+describe("cc-adapter user-prompt-submit", () => {
+  it("emits initialization guidance for an uninitialized project", async () => {
+    await withTrackerHome(async () => {
+      const dir = await fs.mkdtemp(path.join(os.tmpdir(), "pp-cc-prompt-empty-"));
+      const result = await handleUserPromptSubmit({ cwd: dir, session_id: `s-${Date.now()}` });
+      expect(result.code).toBe(0);
+      const payload = JSON.parse(result.stdout!);
+      expect(payload.hookSpecificOutput.hookEventName).toBe("UserPromptSubmit");
+      expect(payload.hookSpecificOutput.additionalContext).toContain("Do you want me to create `project-progress/` here?");
+      await expect(fs.access(path.join(dir, "project-progress"))).rejects.toThrow();
+    });
+  });
+
+  it("stays silent for initialized and opted-out projects", async () => {
+    await withTrackerHome(async () => {
+      const initialized = await fs.mkdtemp(path.join(os.tmpdir(), "pp-cc-prompt-initialized-"));
+      await writeProgress(initialized, progressDoc({ project: "Initialized" }));
+      const initializedResult = await handleUserPromptSubmit({ cwd: initialized, session_id: `s-${Date.now()}` });
+      expect(initializedResult.stdout).toBeUndefined();
+
+      const optedOut = await fs.mkdtemp(path.join(os.tmpdir(), "pp-cc-prompt-optout-"));
+      await setProjectTrackingState(optedOut, "opted-out");
+      const optedOutResult = await handleUserPromptSubmit({ cwd: optedOut, session_id: `s-${Date.now()}` });
+      expect(optedOutResult.stdout).toBeUndefined();
     });
   });
 });

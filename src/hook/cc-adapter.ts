@@ -13,7 +13,7 @@ import { checkFreshness } from "./freshness.js";
 import { validateProgressFile } from "./validator.js";
 
 // Adapter that bridges Claude Code hook events (JSON on stdin) to the Awesome
-// Progress Tracker checks. Invoked as: node cc-adapter.js <session-start|pre-commit|stop>
+// Progress Tracker checks. Invoked as: node cc-adapter.js <session-start|user-prompt-submit|pre-commit|stop>
 // It must never throw or block a session on its own failure: every handler
 // degrades to "allow / stay silent" on error.
 
@@ -31,6 +31,32 @@ export interface HookResult {
   code: number;
   stdout?: string;
   stderr?: string;
+}
+
+async function initializationGuidance(cwd: string, hookEventName: string): Promise<HookResult> {
+  const progressPath = progressPathFor(cwd);
+  if (await fileExists(progressPath)) return { code: 0 };
+
+  const state = await bestEffortReadProjectState(cwd);
+  if (state === "opted-out") return { code: 0 };
+
+  const statusLine = state === "opted-in"
+    ? "This project previously opted in to Awesome Progress Tracker, but `project-progress/Progress.md` is missing."
+    : "This project is not initialized with Awesome Progress Tracker.";
+  return {
+    code: 0,
+    stdout: emitJson({
+      hookSpecificOutput: {
+        hookEventName,
+        additionalContext: [
+          `${statusLine} For multi-step feature, investigation, refactor, debugging, deployment, release, or setup work, ask exactly:`,
+          "\"This project is not initialized with Awesome Progress Tracker. Do you want me to create `project-progress/` here?\"",
+          "Only initialize after the user says yes. If the user says no, record a per-project opt-out with `awesome-progress-tracker state set . --state opted-out`.",
+          "Do not ask for trivial one-off or read-only tasks. Do not create files from hooks. Never write secrets to progress files."
+        ].join("\n")
+      }
+    })
+  };
 }
 
 function progressPathFor(cwd: string): string {
@@ -229,26 +255,7 @@ export async function handleSessionStart(event: HookEvent): Promise<HookResult> 
 
   const progressPath = progressPathFor(cwd);
   if (!(await fileExists(progressPath))) {
-    const state = await bestEffortReadProjectState(cwd);
-    if (state === "opted-out") return { code: 0 };
-
-    const statusLine = state === "opted-in"
-      ? "This project previously opted in to Awesome Progress Tracker, but `project-progress/Progress.md` is missing."
-      : "This project is not initialized with Awesome Progress Tracker.";
-    return {
-      code: 0,
-      stdout: emitJson({
-        hookSpecificOutput: {
-          hookEventName: "SessionStart",
-          additionalContext: [
-            `${statusLine} For multi-step feature, investigation, refactor, debugging, deployment, release, or setup work, ask exactly:`,
-            "\"This project is not initialized with Awesome Progress Tracker. Do you want me to create `project-progress/` here?\"",
-            "Only initialize after the user says yes. If the user says no, record a per-project opt-out with `awesome-progress-tracker state set . --state opted-out`.",
-            "Do not ask for trivial one-off or read-only tasks. Do not create files from hooks. Never write secrets to progress files."
-          ].join("\n")
-        }
-      })
-    };
+    return await initializationGuidance(cwd, "SessionStart");
   }
 
   await bestEffortSetProjectState(cwd, "initialized");
@@ -311,6 +318,10 @@ export async function handleSessionStart(event: HookEvent): Promise<HookResult> 
       }
     })
   };
+}
+
+export async function handleUserPromptSubmit(event: HookEvent): Promise<HookResult> {
+  return await initializationGuidance(event.cwd ?? process.cwd(), "UserPromptSubmit");
 }
 
 export async function handlePreCommit(event: HookEvent): Promise<HookResult> {
@@ -467,6 +478,8 @@ export async function runHook(sub: string, event: HookEvent): Promise<HookResult
     switch (sub) {
       case "session-start":
         return await handleSessionStart(event);
+      case "user-prompt-submit":
+        return await handleUserPromptSubmit(event);
       case "pre-commit":
         return await handlePreCommit(event);
       case "pre-edit":

@@ -12,7 +12,7 @@ Project-local Markdown that survives context resets — so your agent picks up e
 [![Node](https://img.shields.io/badge/node-%3E%3D18-339933?style=flat-square&logo=node.js&logoColor=white)](#choose-your-path)
 [![TypeScript](https://img.shields.io/badge/-typescript-3178C6?style=flat-square&logo=typescript&logoColor=white)](#mcp-server)
 [![Plugins](https://img.shields.io/badge/plugins-Claude%20Code%20%C2%B7%20Codex-8A2BE2?style=flat-square)](#choose-your-path)
-[![Version](https://img.shields.io/badge/version-0.4.1-informational?style=flat-square)](https://github.com/AndriiLavrekha/awesome-progress-tracker/releases/tag/v0.4.1)
+[![Version](https://img.shields.io/badge/version-0.4.2-informational?style=flat-square)](https://github.com/AndriiLavrekha/awesome-progress-tracker/releases/tag/v0.4.2)
 
 [Why](#why) · [Features](#features) · [Quick Start](#choose-your-path) · [MCP Tools](#mcp-server) · [Troubleshooting](#troubleshooting-codex)
 
@@ -138,10 +138,11 @@ Restart Claude Code after the update so the plugin's skills, MCP server, and hoo
 
 </details>
 
-Codex hooks are lifecycle context, not interactive modals. On an initialized project,
+Codex and Claude hooks are lifecycle context, not interactive modals. On an initialized project,
 `SessionStart` injects compact resume context from `project-progress/Progress.md`. On an
-uninitialized project, it emits guidance telling the agent to ask before initialization when the
-requested work is multi-step. The agent and skill perform the user-facing ask:
+uninitialized project, `SessionStart` and `UserPromptSubmit` emit guidance telling the agent to ask
+before initialization when the requested work is multi-step. The agent and skill perform the
+user-facing ask:
 
 ```text
 This project is not initialized with Awesome Progress Tracker. Do you want me to create `project-progress/` here?
@@ -443,11 +444,15 @@ Check these in order:
 
 1. Plugin installed and enabled: `codex plugin list`.
 2. Plugin hooks trusted: open `/hooks` in Codex and trust the `project-progress` hook definitions.
-3. New Codex session started after install or plugin update.
+3. Restart Codex or Claude Code, or start a new session, after install or plugin update.
 4. The project is actually uninitialized: `project-progress/Progress.md` is missing.
 5. The project is not opted out: `awesome-progress-tracker state list`; reset with `awesome-progress-tracker state reset .`.
 6. The task is non-trivial: hooks tell the agent to ask only for multi-step feature, investigation, refactor, setup, debugging, deployment, or release work.
 7. MCP configured and running: use `/mcp` in Codex or `awesome-progress-tracker doctor -g codex`.
+
+The prompt-time hook covers work submitted after startup. If the project was created or selected
+inside an already-running session, submit the next prompt after trusting the updated hook so the
+agent receives the initialization guidance.
 
 Hooks are best-effort and must never block normal Codex operation on their own. If hooks are disabled
 or untrusted, the `project-progress` skill and bootstrap instructions still define the workflow.

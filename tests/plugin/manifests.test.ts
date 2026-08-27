@@ -64,7 +64,7 @@ describe("plugin manifests", () => {
   it("wires lifecycle hooks to the committed adapter", async () => {
     const hooks = await readJson("hooks/hooks.json");
     const events = hooks.hooks;
-    expect(Object.keys(events)).toEqual(expect.arrayContaining(["SessionStart", "PreToolUse", "Stop"]));
+    expect(Object.keys(events)).toEqual(expect.arrayContaining(["SessionStart", "UserPromptSubmit", "PreToolUse", "Stop"]));
 
     const commands: string[] = [];
     for (const groups of Object.values<any>(events)) {
@@ -79,7 +79,7 @@ describe("plugin manifests", () => {
       const match = command.match(/cc-adapter\.js"?\s+(\S+)/);
       if (match) subs.add(match[1]);
     }
-    expect(subs).toEqual(new Set(["session-start", "pre-commit", "pre-edit", "stop"]));
+    expect(subs).toEqual(new Set(["session-start", "user-prompt-submit", "pre-commit", "pre-edit", "stop"]));
     expect(await exists("dist/src/hook/cc-adapter.js")).toBe(true);
   });
 
@@ -129,7 +129,7 @@ describe("Codex plugin manifests", () => {
 
   it("wires Codex lifecycle hooks to the committed adapter via PLUGIN_ROOT", async () => {
     const hooks = await readJson("hooks/hooks-codex.json");
-    expect(Object.keys(hooks.hooks)).toEqual(expect.arrayContaining(["SessionStart", "PreToolUse", "Stop"]));
+    expect(Object.keys(hooks.hooks)).toEqual(expect.arrayContaining(["SessionStart", "UserPromptSubmit", "PreToolUse", "Stop"]));
 
     const subs = new Set<string>();
     for (const groups of Object.values<any>(hooks.hooks)) {
@@ -143,6 +143,6 @@ describe("Codex plugin manifests", () => {
         }
       }
     }
-    expect(subs).toEqual(new Set(["session-start", "pre-commit", "pre-edit", "stop-soft"]));
+    expect(subs).toEqual(new Set(["session-start", "user-prompt-submit", "pre-commit", "pre-edit", "stop-soft"]));
   });
 });

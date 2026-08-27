@@ -46,7 +46,7 @@
       cloned repo with no build step, so committed `dist/` must match `src/`).
 - [x] `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` agree on the plugin name.
 - [x] `.mcp.json` points at `${CLAUDE_PLUGIN_ROOT}/dist/src/mcp/server.js`.
-- [x] `hooks/hooks.json` wires SessionStart, PreToolUse (git commit), and Stop to the committed adapter.
+- [x] `hooks/hooks.json` wires SessionStart, UserPromptSubmit, PreToolUse (git commit), and Stop to the committed adapter.
 - [x] `/project-progress:init` command and `project-progress` skill load under `claude plugin details`.
 - [x] Plugin installs cleanly via `claude plugin marketplace add` + `claude plugin install`.
 
@@ -54,7 +54,7 @@
 
 - [x] `.codex-plugin/plugin.json` references `./skills/`, `./.mcp.json`, and `./hooks/hooks-codex.json`.
 - [x] `.agents/plugins/marketplace.json` lists the plugin with `source.path` "." and `ON_INSTALL` auth.
-- [x] `hooks/hooks-codex.json` wires SessionStart/PreToolUse/Stop to the adapter via `${PLUGIN_ROOT}` (no Claude-only `if`).
+- [x] `hooks/hooks-codex.json` wires SessionStart/UserPromptSubmit/PreToolUse/Stop to the adapter via `${PLUGIN_ROOT}` (no Claude-only `if`).
 - [x] Adapter output uses the shared `hookSpecificOutput` / `systemMessage` shape Codex and Claude Code both accept.
 - [x] Installs cleanly via `codex plugin marketplace add` + `codex plugin add project-progress@<marketplace>`.
 - [ ] Plugin hooks are trusted on first run (Codex prompts; document that users approve once).
