@@ -22,7 +22,7 @@ commit_progress: true
 
 ## Resume Snapshot
 
-The prompt-time initialization bug is fixed in the working tree. `handleUserPromptSubmit` reuses the consent guidance, both Codex and Claude manifests invoke it, and v0.4.2 metadata/release notes are prepared. Focused tests pass; full release verification and publication remain.
+The prompt-time initialization bug is fixed and published in v0.4.2. `handleUserPromptSubmit` reuses the consent guidance, both Codex and Claude manifests invoke it, and the release tag is live on GitHub. The remote main branch also includes the latest README cleanup from the concurrent remote update.
 
 Plans A through D are merged to `main`; the branch is now eleven commits ahead of `origin/main`. The literal-path MCP resolution fix is committed as `cd7962e`, scenario 03 as `adcba7b`, and release preparation has bumped package/plugin manifests to `0.4.1`.
 
@@ -50,7 +50,7 @@ Added `RELEASE_NOTES_v0.4.1.md`, reran the full release verification, pushed `ma
 
 ## Next Action
 
-Run the complete verification suite, review and commit the v0.4.2 fix, push `main`, publish `v0.4.2`, and verify the remote release/package contents. Keep Hermes deferred.
+Keep Hermes deferred. For the next release, run independent benchmark sessions for scenarios 01 through 03 and record only uncontaminated transcripts/results.
 
 ## Remaining Work
 
@@ -133,7 +133,7 @@ Run the complete verification suite, review and commit the v0.4.2 fix, push `mai
 
 ## Blockers
 
-No blocker for the v0.4.2 fix or publication. Hermes verification is intentionally deferred at the user's direction; its local CLI hang is not treated as a blocker.
+None for the v0.4.2 fix, publication, or benchmark work. Hermes verification is intentionally deferred at the user's direction; its local CLI hang is not treated as a blocker.
 
 Two notes on state outside this repository. The global index at `~/.awesome-progress-tracker/projects.json` was refreshed: 51 entries down to 9, pruning the dead worktree entry that made `progress-tracker` ambiguous along with 41 other entries whose `Progress.md` no longer existed. This repository still will not appear in that index until `PROJECT_PROGRESS_ROOTS` includes `D:/depot`; that is configuration, not a defect.
 
