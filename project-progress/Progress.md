@@ -24,7 +24,7 @@ commit_progress: true
 
 The prompt-time initialization bug is fixed and published in v0.4.2. `handleUserPromptSubmit` reuses the consent guidance, both Codex and Claude manifests invoke it, and the release tag is live on GitHub. The remote main branch also includes the latest README cleanup from the concurrent remote update.
 
-Plans A through D are merged to `main`; the branch is now eleven commits ahead of `origin/main`. The literal-path MCP resolution fix is committed as `cd7962e`, scenario 03 as `adcba7b`, and release preparation has bumped package/plugin manifests to `0.4.1`.
+Plans A through D and the v0.4.2 prompt-hook fix are merged to `main`. The literal-path MCP resolution fix is committed as `cd7962e`, scenario 03 as `adcba7b`, and package/plugin manifests now target `0.4.2`.
 
 Benchmark scenario 03 (`03-runtime-exception`) is now built with a complete repository bundle, tracker overlay, expected scoring contract, and a runtime-only compatibility exception that makes the forbidden migration type-check compatible but incorrect. `bench:build`, all 51 benchmark tests, and both tracker/baseline setup paths pass.
 
@@ -46,7 +46,7 @@ The approved direction is skill-first and project-local:
 
 ## Last Session
 
-Added `RELEASE_NOTES_v0.4.1.md`, reran the full release verification, pushed `main` through `bbd23f1`, created and pushed annotated tag `v0.4.1`, and published the non-draft, non-prerelease GitHub release. Remote verification confirms the tag and release URL. Hermes remains deferred; independent benchmark runs are still unrecorded.
+Implemented the prompt-time init fix, passed the full verification suite, merged the concurrent README cleanup, pushed `main` through `61e3dda`, created and pushed annotated tag `v0.4.2`, and published the non-draft, non-prerelease GitHub release. Hermes remains deferred; independent benchmark runs are still unrecorded.
 
 ## Next Action
 
