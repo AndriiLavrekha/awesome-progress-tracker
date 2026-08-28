@@ -1,5 +1,5 @@
 ---
-checkpoint_at: 2026-08-27T11:54:20Z
+checkpoint_at: 2026-08-28T08:41:46Z
 worktree_dirty: true
 base_branch: main
 base_commit: 90a73762ec9baf68921309b3726edac52c73be1c
@@ -24,6 +24,8 @@ commit_progress: true
 
 The prompt-time initialization bug is fixed and published in v0.4.2. `handleUserPromptSubmit` reuses the consent guidance, both Codex and Claude manifests invoke it, and the release tag is live on GitHub. The remote main branch also includes the latest README cleanup from the concurrent remote update.
 
+Hermes Skill + MCP integration was revalidated on 2026-08-28 in an isolated `HERMES_HOME` using the packed `awesome-progress-tracker@0.4.2` artifact and Hermes Agent v0.20.6. Managed install, list discovery, MCP connection/tool discovery, package status, JSON doctor, opt-out state, and uninstall all passed. The README now links to the authoritative Hermes installation instructions rather than obsolete package commands. A real model-backed Hermes agent using disposable Codex OAuth completed `refresh_projects`, `list_projects`, `read_project_progress`, and `update_project_progress`, then confirmed the exact Next Action through a second MCP read.
+
 Plans A through D and the v0.4.2 prompt-hook fix are merged to `main`. The literal-path MCP resolution fix is committed as `cd7962e`, scenario 03 as `adcba7b`, and package/plugin manifests now target `0.4.2`.
 
 Benchmark scenario 03 (`03-runtime-exception`) is now built with a complete repository bundle, tracker overlay, expected scoring contract, and a runtime-only compatibility exception that makes the forbidden migration type-check compatible but incorrect. `bench:build`, all 51 benchmark tests, and both tracker/baseline setup paths pass.
@@ -46,11 +48,11 @@ The approved direction is skill-first and project-local:
 
 ## Last Session
 
-Implemented the prompt-time init fix, passed the full verification suite, merged the concurrent README cleanup, pushed `main` through `61e3dda`, created and pushed annotated tag `v0.4.2`, and published the non-draft, non-prerelease GitHub release. Hermes remains deferred; independent benchmark runs are still unrecorded.
+Created `feat/hermes-integration-resume` in an isolated worktree, revalidated the packaged Hermes Skill + MCP integration against a disposable profile, corrected obsolete Hermes install documentation, and confirmed cleanup removes both managed entries. A real Hermes agent using disposable Codex OAuth invoked `refresh_projects`, `list_projects`, `read_project_progress`, and `update_project_progress`, then verified the updated Next Action through a second MCP read. Independent benchmark runs are still unrecorded.
 
 ## Next Action
 
-Keep Hermes deferred. For the next release, run independent benchmark sessions for scenarios 01 through 03 and record only uncontaminated transcripts/results.
+Decide the next release/versioning scope, then run independent benchmark sessions for scenarios 01 through 03 and record only uncontaminated transcripts/results if benchmark evidence is included.
 
 ## Remaining Work
 
@@ -86,6 +88,7 @@ Keep Hermes deferred. For the next release, run independent benchmark sessions f
 - [x] Complete final quality review.
 - [x] Integrate the reviewed Hermes branch into `main`.
 - [ ] Decide Hermes release/versioning and publish the next release.
+- [x] Run a model-backed Hermes agent smoke in a disposable Codex OAuth profile (tool discovery, read, and update); the CLI/MCP lifecycle smoke is complete.
 - [ ] Manually verify Codex Stop-hook exit-code-2 behavior, then promote `hooks-codex.json` from `stop-soft` to `stop`.
 - [ ] Commit and release ADR 0016 (fold/archive) and ADR 0017 (fail-closed Stop gate).
 - [x] Brainstorm the resume-hardening roadmap and write four design specs.
@@ -133,7 +136,7 @@ Keep Hermes deferred. For the next release, run independent benchmark sessions f
 
 ## Blockers
 
-None for the v0.4.2 fix, publication, or benchmark work. Hermes verification is intentionally deferred at the user's direction; its local CLI hang is not treated as a blocker.
+None for the v0.4.2 fix, publication, or benchmark work. The packaged Hermes CLI/MCP lifecycle and model-backed agent smoke both pass; the agent verified a `Next Action` update through a second MCP read in a disposable Codex OAuth profile.
 
 Two notes on state outside this repository. The global index at `~/.awesome-progress-tracker/projects.json` was refreshed: 51 entries down to 9, pruning the dead worktree entry that made `progress-tracker` ambiguous along with 41 other entries whose `Progress.md` no longer existed. This repository still will not appear in that index until `PROJECT_PROGRESS_ROOTS` includes `D:/depot`; that is configuration, not a defect.
 

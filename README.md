@@ -169,15 +169,10 @@ lifecycle hooks are deferred for Hermes, so this path does not yet wire `Session
 
 If Hermes itself is not installed yet:
 
-```bash
-npm install -g hermes
-```
-
-If you prefer to keep this package available to Hermes globally, you can also install the package
-with:
+Install it with the [official Hermes Agent installation instructions](https://hermes-agent.nousresearch.com/docs/getting-started/installation), then confirm the CLI is available:
 
 ```bash
-hermes install -g github:AndriiLavrekha/awesome-progress-tracker
+hermes --version
 ```
 
 To wire the supported managed integration, run:
@@ -199,8 +194,7 @@ Named collisions stop the install before any changes are made. If Hermes already
 `project-progress` skill or `awesome-progress-tracker` MCP server, remove or rename the existing
 entry first and rerun the installer.
 
-After install or update, restart Hermes after install or update so it reloads the managed skill and
-MCP registry.
+After install or update, restart Hermes so it reloads the managed skill and MCP registry.
 
 Because lifecycle hooks are deferred for Hermes, use the skill and MCP tools directly for now:
 

@@ -16,11 +16,11 @@ describe("instruction pack", () => {
     assertContainsAll(text, [
       "Hermes Agent",
       "supported Skill + MCP installation",
-      "npm install -g hermes",
-      "hermes install -g github:AndriiLavrekha/awesome-progress-tracker",
+      "official Hermes Agent installation instructions",
+      "hermes --version",
       "`install`, `doctor`, and `uninstall` commands",
       "Named collisions stop the install before any changes are made.",
-      "restart Hermes after install or update",
+      "After install or update, restart Hermes",
       "lifecycle hooks are deferred for Hermes"
     ]);
   });
@@ -59,7 +59,7 @@ describe("instruction pack", () => {
       "Disposable Hermes verification uses a temporary `HERMES_HOME`.",
       "`install -g hermes`, `doctor -g hermes`, and `uninstall -g hermes` work against the packaged tarball.",
       "`hermes skills list --source hub`, `hermes mcp list`, and `hermes mcp test awesome-progress-tracker` pass.",
-      "Hermes agent tool discovery/read/update smoke tests pass.",
+      "Hermes agent tool discovery/read/update smoke tests pass in a disposable Codex OAuth profile.",
       "Hermes opt-out and uninstall paths are verified."
     ]);
   });
