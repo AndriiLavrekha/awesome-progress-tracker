@@ -1,8 +1,8 @@
 ---
-checkpoint_at: 2026-08-28T08:41:46Z
+checkpoint_at: 2026-08-31T14:52:23Z
 worktree_dirty: true
 base_branch: main
-base_commit: 498fca47e1fdffc5562f9b0792f888f55c6ca460
+base_commit: c67ed966ca9eda693d03dc64a49600f88bebd1d6
 session_id: 5b098510-9ff8-4473-b10a-00021a2363e8
 handoff: interrupted
 project: progress-tracker
@@ -21,6 +21,8 @@ commit_progress: true
 # Progress Tracker
 
 ## Resume Snapshot
+
+`feat/hermes-integration-resume` is merged into `main` and pushed to `origin/main` (`c67ed96`). The merge was a fast-forward of `72c0a60`; a follow-up commit `c67ed96` resolved a `checkpoint_at` frontmatter conflict in this file against local uncommitted state, which was stashed and restored cleanly (no other changes lost — the stashed `marketplace.json` edit already matched `HEAD`). `origin/main` now carries the Hermes resume/verification work described below.
 
 The prompt-time initialization bug is fixed and published in v0.4.2. `handleUserPromptSubmit` reuses the consent guidance, both Codex and Claude manifests invoke it, and the release tag is live on GitHub. The remote main branch also includes the latest README cleanup from the concurrent remote update.
 
@@ -52,7 +54,7 @@ Created `feat/hermes-integration-resume` in an isolated worktree, revalidated th
 
 ## Next Action
 
-Decide the next release/versioning scope, then run independent benchmark sessions for scenarios 01 through 03 and record only uncontaminated transcripts/results if benchmark evidence is included.
+Decide the next release/versioning scope, then run independent benchmark sessions for scenarios 01 through 03 and record only uncontaminated transcripts/results if benchmark evidence is included. Untracked `docs/adr/0001-0014`, `docs/demo-use-cases.md`, `docs/glossary.md`, and `.hermes/` are still unaddressed — decide whether to commit or gitignore them.
 
 ## Remaining Work
 
