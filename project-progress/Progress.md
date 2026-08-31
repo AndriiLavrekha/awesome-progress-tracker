@@ -1,10 +1,10 @@
 ---
-checkpoint_at: 2026-08-31T14:52:23Z
+checkpoint_at: 2026-08-31T14:54:40Z
 worktree_dirty: true
 base_branch: main
-base_commit: c67ed966ca9eda693d03dc64a49600f88bebd1d6
+base_commit: 3a5e500f31ddeb5fee8c5b1232583db4ee128001
 session_id: 5b098510-9ff8-4473-b10a-00021a2363e8
-handoff: interrupted
+handoff: clean
 project: progress-tracker
 progress_schema_version: 1
 status: in_progress
@@ -22,7 +22,9 @@ commit_progress: true
 
 ## Resume Snapshot
 
-`feat/hermes-integration-resume` is merged into `main` and pushed to `origin/main` (`c67ed96`). The merge was a fast-forward of `72c0a60`; a follow-up commit `c67ed96` resolved a `checkpoint_at` frontmatter conflict in this file against local uncommitted state, which was stashed and restored cleanly (no other changes lost — the stashed `marketplace.json` edit already matched `HEAD`). `origin/main` now carries the Hermes resume/verification work described below.
+`feat/hermes-integration-resume` is merged into `main` and pushed to `origin/main` (`c67ed96`, then `3a5e500`). The merge was a fast-forward of `72c0a60`; a follow-up commit `c67ed96` resolved a `checkpoint_at` frontmatter conflict in this file against local uncommitted state, which was stashed and restored cleanly (no other changes lost — the stashed `marketplace.json` edit already matched `HEAD`). `origin/main` now carries the Hermes resume/verification work described below.
+
+The long-untracked `docs/adr/0001-0014` (predating the already-tracked `0015-0023` series), `docs/demo-use-cases.md`, and `docs/glossary.md` are now committed to `main` — they were real product docs, not scratch. `.hermes/plans/` is added to `.gitignore` as session scratch, matching the existing `/project-progress/` pattern.
 
 The prompt-time initialization bug is fixed and published in v0.4.2. `handleUserPromptSubmit` reuses the consent guidance, both Codex and Claude manifests invoke it, and the release tag is live on GitHub. The remote main branch also includes the latest README cleanup from the concurrent remote update.
 
@@ -54,7 +56,7 @@ Created `feat/hermes-integration-resume` in an isolated worktree, revalidated th
 
 ## Next Action
 
-Decide the next release/versioning scope, then run independent benchmark sessions for scenarios 01 through 03 and record only uncontaminated transcripts/results if benchmark evidence is included. Untracked `docs/adr/0001-0014`, `docs/demo-use-cases.md`, `docs/glossary.md`, and `.hermes/` are still unaddressed — decide whether to commit or gitignore them.
+Decide the next release/versioning scope, then run independent benchmark sessions for scenarios 01 through 03 and record only uncontaminated transcripts/results if benchmark evidence is included.
 
 ## Remaining Work
 
