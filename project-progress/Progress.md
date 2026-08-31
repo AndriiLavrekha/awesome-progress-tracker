@@ -2,9 +2,9 @@
 checkpoint_at: 2026-08-28T08:41:46Z
 worktree_dirty: true
 base_branch: main
-base_commit: 90a73762ec9baf68921309b3726edac52c73be1c
-session_id: 01a0430f-23c9-79f0-b8b7-81e733dfce45
-handoff: clean
+base_commit: 498fca47e1fdffc5562f9b0792f888f55c6ca460
+session_id: 5b098510-9ff8-4473-b10a-00021a2363e8
+handoff: interrupted
 project: progress-tracker
 progress_schema_version: 1
 status: in_progress
