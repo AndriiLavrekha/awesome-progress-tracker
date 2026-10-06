@@ -7,3 +7,5 @@ At kickoff, check whether `project-progress/Progress.md` exists. If it exists, r
 Update progress files after meaningful work checkpoints: kickoff when state changes, major decisions, completed milestones, blockers, verification, scope changes, deployment, and session ending. Before finishing meaningful work, make sure the resume snapshot, next action, blockers, and remaining work are current.
 
 Do not write secrets to progress files. Respect `sensitivity` and `commit_progress` in frontmatter: if `sensitivity: private`, avoid personal, customer, business, proprietary, or identifying details that are not needed to resume work; if `sensitivity: sensitive` or `commit_progress: false`, do not stage or commit progress files unless explicitly instructed.
+
+When you update `Progress.md`, set `provider_last_used`, `agent_last_used`, `model_last_used`, and `effort_last_used`, using `unknown` for anything this session cannot see.

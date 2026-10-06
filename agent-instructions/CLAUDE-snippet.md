@@ -7,3 +7,5 @@ Default read path: `project-progress/Progress.md` frontmatter, `Resume Snapshot`
 Before finishing meaningful work, update `Progress.md`, `Tasks.md`, and `Session Log.md`. Update `Decisions.md` and `Open Questions.md` when relevant. Keep the `Resume Snapshot`, next action, blockers, and completion state current enough for another agent to resume.
 
 Never store secrets in progress files. If `sensitivity: private`, avoid personal, customer, business, proprietary, or identifying details that are not needed to resume work. If `sensitivity: sensitive` or `commit_progress: false`, do not stage or commit progress files unless explicitly instructed.
+
+When you update `Progress.md`, set `provider_last_used`, `agent_last_used`, `model_last_used`, and `effort_last_used`, using `unknown` for anything this session cannot see.

@@ -34,6 +34,7 @@ new session ◄── SessionStart hook injects the snapshot, no lookup needed �
 
 - **🗂️ One file per project, human-readable** — plain Markdown you can read, edit, diff, and commit.
 - **🔁 Automatic resume context** — `SessionStart` injects the Resume Snapshot and Next Action at kickoff.
+- **Last runtime memo** — `Progress.md` records the provider, agent, model, and effort of the session that last updated it, and SessionStart repeats that line.
 - **🛡️ Sensitive-commit guard** — blocks `git commit` when staged progress is marked `commit_progress: false` or `sensitivity: sensitive`.
 - **⏰ Stop reminders** — flags when the working tree changed but `Progress.md` didn't, and scans for accidentally-committed secrets.
 - **🧩 Works everywhere** — first-class plugins for Claude Code and Codex, plus an open-standard `SKILL.md` skill for Gemini CLI, Copilot, and Cursor.

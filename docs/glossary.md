@@ -20,6 +20,10 @@ The reusable `SKILL.md` workflow that tells an agent when and how to maintain pr
 
 `project-progress/Progress.md` in the tracked project. The global project index and MCP responses are derived views and must not replace it.
 
+## Last runtime
+
+The one line naming the provider, agent, model, and effort of the session that last updated `project-progress/Progress.md`. SessionStart repeats it.
+
 ## Tracker MCP server
 
 The Node stdio server started by `awesome-progress-tracker mcp`. In Hermes it's registered as `awesome-progress-tracker`; discovered tools are prefixed `mcp_awesome_progress_tracker_`.

@@ -76,6 +76,9 @@ If `sensitivity: sensitive` or `commit_progress: false`, update local progress f
 ## What To Update
 
 - `Progress.md`: current state, `Resume Snapshot`, next action, blockers, deployment state, and `Completion Criteria` status. `Resume Snapshot` and `Last Session` are replaced wholesale on every update — never prepend or append prior text onto them. If old narrative is worth keeping, put it in a dated `Session Log.md` entry instead of accumulating it in these two fields.
+
+On every meaningful `Progress.md` update, set these frontmatter fields together from this session: `agent_last_used`, `provider_last_used`, `model_last_used`, `effort_last_used`, and `updated`. Provider is the app that holds the chat (`claude-code`, `codex`, `grok`, `cursor`, `chatgpt`, `hermes`, `gemini`, `copilot`, or another short slug). Claude Code is exactly `claude-code`. Codex is exactly `codex`. Agent is the role or product agent name. Model is the model id. Effort is the host's effort name. Write `unknown` for any value this session cannot see. Do not guess, and do not keep a previous session's model or effort. Each value is one unquoted YAML scalar with no newline and no `#`.
+
 - `Tasks.md`: active, remaining, and completed tasks.
 - `Decisions.md`: durable decisions with a short reason.
 - `Open Questions.md`: unresolved questions that need user input, research, access, credentials, or a later decision.

@@ -4,6 +4,9 @@ progress_schema_version: 1
 status: active
 path: C:/path/to/project
 agent_last_used: unknown
+provider_last_used: unknown
+model_last_used: unknown
+effort_last_used: unknown
 updated: 2026-06-26
 last_milestone: initialized project progress
 deployed: false

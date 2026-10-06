@@ -110,7 +110,8 @@ describe("instruction pack", () => {
       "sensitivity: private",
       "commit_progress",
       "Never write secrets",
-      "Completion Criteria"
+      "Completion Criteria",
+      "provider_last_used"
     ]);
   });
 
@@ -123,7 +124,8 @@ describe("instruction pack", () => {
       "secrets",
       "sensitivity",
       "sensitivity: private",
-      "commit_progress"
+      "commit_progress",
+      "provider_last_used"
     ]);
     expect(text.includes("token-conscious") || text.includes("Do not read all history by default")).toBe(true);
   });
@@ -138,8 +140,25 @@ describe("instruction pack", () => {
       "secrets",
       "sensitivity",
       "sensitivity: private",
-      "commit_progress"
+      "commit_progress",
+      "provider_last_used"
     ]);
+  });
+
+  it("documents the last runtime memo", async () => {
+    const readme = await read("README.md");
+    expect(readme).toContain(
+      "`Progress.md` records the provider, agent, model, and effort of the session that last updated it, and SessionStart repeats that line."
+    );
+    const glossary = await read("docs/glossary.md");
+    expect(glossary).toContain("## Last runtime");
+    const template = await read("templates/project-progress/Progress.md");
+    expect(template).toContain("provider_last_used: unknown");
+    expect(template).toContain("model_last_used: unknown");
+    expect(template).toContain("effort_last_used: unknown");
+    const adr = await read("docs/adr/0024-last-runtime-memo.md");
+    expect(adr).toContain("blank provider");
+    expect(adr).toContain("clean-handoff");
   });
 
   it("mentions required terms in the HOOKS doc", async () => {
