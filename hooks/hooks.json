@@ -47,7 +47,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/src/hook/cc-adapter.js\" stop"
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/src/hook/cc-adapter.js\" stop --provider claude-code"
           }
         ]
       }

@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { handlePreCommit, handlePreEdit, handleSessionStart, handleStop, handleUserPromptSubmit } from "../../src/hook/cc-adapter.js";
+import { handlePreCommit, handlePreEdit, handleSessionStart, handleStop, handleUserPromptSubmit, providerFromArgv, runHook } from "../../src/hook/cc-adapter.js";
 import { parseFrontmatter } from "../../src/mcp/markdown.js";
 import { readProjectTrackingState, setProjectTrackingState } from "../../src/project-state.js";
 
@@ -1093,6 +1093,120 @@ describe("cc-adapter last runtime", () => {
       const context = JSON.parse(result.stdout!).hookSpecificOutput.additionalContext as string;
       expect(context).toContain("Last runtime: model grok-4.7");
       expect(context).not.toContain("provider unknown");
+    });
+  });
+
+  async function freshStop(
+    fields: Record<string, string>,
+    provider: string | undefined,
+    changeBody: boolean,
+    extraFile: boolean
+  ): Promise<{ frontmatter: Record<string, string | boolean | number>; code: number }> {
+    const dir = await makeRepo();
+    const file = await writeProgress(dir, progressDoc({ project: "Fill", ...fields }));
+    await commitAll(dir, "init");
+    if (extraFile) await fs.writeFile(path.join(dir, "src.txt"), "work", "utf-8");
+    const sessionId = `fill-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    await handleSessionStart({ cwd: dir, session_id: sessionId });
+    if (changeBody) {
+      const current = await fs.readFile(file, "utf-8");
+      await fs.writeFile(file, current.replace("Wire the widget.", "Ship the widget."), "utf-8");
+    }
+    const result = await handleStop(
+      { cwd: dir, session_id: sessionId },
+      provider === undefined ? {} : { provider }
+    );
+    return { frontmatter: parseFrontmatter(await fs.readFile(file, "utf-8")), code: result.code };
+  }
+
+  it("fills an unknown provider on a fresh stop and leaves the other runtime fields", async () => {
+    await withTrackerHome(async () => {
+      const filled = await freshStop(
+        {
+          provider_last_used: "unknown",
+          agent_last_used: "grok",
+          model_last_used: "grok-4.7",
+          effort_last_used: "high",
+          updated: "2026-10-06"
+        },
+        "claude-code",
+        true,
+        true
+      );
+      expect(filled.frontmatter.handoff).toBe("clean");
+      expect(filled.frontmatter.provider_last_used).toBe("claude-code");
+      expect(filled.frontmatter.agent_last_used).toBe("grok");
+      expect(filled.frontmatter.model_last_used).toBe("grok-4.7");
+      expect(filled.frontmatter.effort_last_used).toBe("high");
+      expect(filled.frontmatter.updated).toBe("2026-10-06");
+    });
+  });
+
+  it("fills blank, any letter-case, quoted unknown, and quoted spaces", async () => {
+    await withTrackerHome(async () => {
+      for (const provider of ["", "UNKNOWN", '"unknown"', "'unknown'", '"   "']) {
+        const filled = await freshStop({ provider_last_used: provider }, "codex", true, true);
+        expect(filled.frontmatter.provider_last_used).toBe("codex");
+      }
+      const missing = await freshStop({}, "codex", true, true);
+      expect(missing.frontmatter.provider_last_used).toBe("codex");
+    });
+  });
+
+  it("keeps a known provider, including false and integers, and ignores an invalid slug", async () => {
+    await withTrackerHome(async () => {
+      const kept = await freshStop(
+        {
+          provider_last_used: "grok",
+          model_last_used: "grok-4.7",
+          effort_last_used: "high",
+          agent_last_used: "grok",
+          updated: "2026-10-06"
+        },
+        "claude-code",
+        true,
+        true
+      );
+      expect(kept.frontmatter.provider_last_used).toBe("grok");
+      expect(kept.frontmatter.model_last_used).toBe("grok-4.7");
+
+      const boolProvider = await freshStop({ provider_last_used: "false" }, "claude-code", true, true);
+      expect(boolProvider.frontmatter.provider_last_used).toBe(false);
+      const zero = await freshStop({ provider_last_used: "0" }, "claude-code", true, true);
+      expect(zero.frontmatter.provider_last_used).toBe(0);
+      const ten = await freshStop({ provider_last_used: "10" }, "claude-code", true, true);
+      expect(ten.frontmatter.provider_last_used).toBe(10);
+
+      const invalid = await freshStop({ provider_last_used: "unknown" }, "Claude Code", true, true);
+      expect(invalid.frontmatter.provider_last_used).toBe("unknown");
+    });
+  });
+
+  it("does not fill when the body is stale or when only progress files changed", async () => {
+    await withTrackerHome(async () => {
+      const stale = await freshStop({ provider_last_used: "unknown" }, "claude-code", false, true);
+      expect(stale.frontmatter.handoff).toBe("interrupted");
+      expect(stale.frontmatter.provider_last_used).toBe("unknown");
+
+      const progressOnly = await freshStop({ provider_last_used: "unknown" }, "claude-code", true, false);
+      expect(progressOnly.frontmatter.handoff).toBe("interrupted");
+      expect(progressOnly.frontmatter.provider_last_used).toBe("unknown");
+    });
+  });
+
+  it("ignores a provider flag on session start", async () => {
+    await withTrackerHome(async () => {
+      const dir = await makeRepo();
+      const file = await writeProgress(dir, progressDoc({ project: "NoStartWrite" }));
+      await commitAll(dir, "init");
+
+      await runHook("session-start", { cwd: dir, session_id: "runtime-start" }, { provider: "claude-code" });
+
+      expect(parseFrontmatter(await fs.readFile(file, "utf-8")).provider_last_used).toBeUndefined();
+      expect(providerFromArgv(["--provider", "claude-code"])).toBe("claude-code");
+      expect(providerFromArgv(["--provider", "Claude Code"])).toBeUndefined();
+      expect(providerFromArgv(["--provider"])).toBeUndefined();
+      expect(providerFromArgv([])).toBeUndefined();
     });
   });
 });

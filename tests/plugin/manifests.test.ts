@@ -92,6 +92,19 @@ describe("plugin manifests", () => {
     const command = await fs.readFile(path.join(root, "commands/init.md"), "utf-8");
     expect(command).toContain("description:");
   });
+
+  it("passes the runtime provider only on Stop", async () => {
+    const hooks = await readJson("hooks/hooks.json");
+    const commands: string[] = [];
+    for (const groups of Object.values<any>(hooks.hooks)) {
+      for (const group of groups) {
+        for (const hook of group.hooks) commands.push(hook.command);
+      }
+    }
+    const stop = commands.find((command) => /cc-adapter\.js"?\s+stop\b/.test(command));
+    expect(stop).toContain("--provider claude-code");
+    expect(commands.filter((command) => command.includes("session-start")).every((command) => !command.includes("--provider"))).toBe(true);
+  });
 });
 
 describe("Codex plugin manifests", () => {
@@ -144,5 +157,18 @@ describe("Codex plugin manifests", () => {
       }
     }
     expect(subs).toEqual(new Set(["session-start", "user-prompt-submit", "pre-commit", "pre-edit", "stop-soft"]));
+  });
+
+  it("passes the runtime provider only on Stop", async () => {
+    const hooks = await readJson("hooks/hooks-codex.json");
+    const commands: string[] = [];
+    for (const groups of Object.values<any>(hooks.hooks)) {
+      for (const group of groups) {
+        for (const hook of group.hooks) commands.push(hook.command);
+      }
+    }
+    const stop = commands.find((command) => /cc-adapter\.js"?\s+stop-soft\b/.test(command));
+    expect(stop).toContain("--provider codex");
+    expect(commands.filter((command) => command.includes("session-start")).every((command) => !command.includes("--provider"))).toBe(true);
   });
 });

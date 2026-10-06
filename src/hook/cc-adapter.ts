@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { bodyHash, sha256 } from "../hash.js";
-import { extractSection, parseFrontmatter, renderLastRuntime } from "../mcp/markdown.js";
+import { extractSection, isKnownRuntimeValue, parseFrontmatter, renderLastRuntime } from "../mcp/markdown.js";
 import { replaceFrontmatterValue, writeFileAtomic } from "../mcp/writer.js";
 import { readProjectTrackingState, setProjectTrackingState } from "../project-state.js";
 // defaultGitRunner's implementation lives in checkpoint.ts, not here.
@@ -157,10 +157,22 @@ async function bestEffortMarkHandoff(
   }
 }
 
+export function normalizeProviderSlug(value: string | undefined): string | undefined {
+  if (!value || !/^[a-z0-9][a-z0-9-]{0,40}$/.test(value)) return undefined;
+  return value;
+}
+
+export function providerFromArgv(argv: string[]): string | undefined {
+  const index = argv.indexOf("--provider");
+  if (index === -1) return undefined;
+  return normalizeProviderSlug(argv[index + 1]);
+}
+
 async function bestEffortRecordSessionEnd(
   cwd: string,
   progressPath: string,
-  now: Date = new Date()
+  now: Date = new Date(),
+  provider?: string
 ): Promise<boolean> {
   try {
     const markdown = await fs.readFile(progressPath, "utf-8");
@@ -173,6 +185,11 @@ async function bestEffortRecordSessionEnd(
       updated = replaceFrontmatterValue(updated, "base_branch", fields.base_branch);
       updated = replaceFrontmatterValue(updated, "worktree_dirty", String(fields.worktree_dirty));
       updated = replaceFrontmatterValue(updated, "checkpoint_at", fields.checkpoint_at);
+    }
+
+    const slug = normalizeProviderSlug(provider);
+    if (slug && isKnownRuntimeValue(parseFrontmatter(markdown).provider_last_used) === null) {
+      updated = replaceFrontmatterValue(updated, "provider_last_used", slug);
     }
 
     // writeFileAtomic throws "Progress file changed on disk" when another
@@ -395,6 +412,7 @@ export interface HandleStopOptions {
   // equivalent hook are unverified, so callers there must pass false and
   // fall back to the soft, non-blocking warning.
   allowBlock?: boolean;
+  provider?: string;
 }
 
 export async function handleStop(event: HookEvent, options: HandleStopOptions = {}): Promise<HookResult> {
@@ -434,7 +452,7 @@ export async function handleStop(event: HookEvent, options: HandleStopOptions = 
   if (!stale) {
     // Only stamp when the agent actually updated Progress.md this session.
     // Stamping an unchanged file would assert a verification that never happened.
-    const recorded = await bestEffortRecordSessionEnd(cwd, progressPath);
+    const recorded = await bestEffortRecordSessionEnd(cwd, progressPath, new Date(), options.provider);
     if (!recorded) {
       warnings.push(
         "Checkpoint and handoff were not recorded; drift detection may be unavailable next session."
@@ -476,7 +494,7 @@ export async function handleStop(event: HookEvent, options: HandleStopOptions = 
   return { code: 0, stdout: emitJson({ systemMessage: message }) };
 }
 
-export async function runHook(sub: string, event: HookEvent): Promise<HookResult> {
+export async function runHook(sub: string, event: HookEvent, options: { provider?: string } = {}): Promise<HookResult> {
   try {
     switch (sub) {
       case "session-start":
@@ -488,9 +506,9 @@ export async function runHook(sub: string, event: HookEvent): Promise<HookResult
       case "pre-edit":
         return await handlePreEdit(event);
       case "stop":
-        return await handleStop(event);
+        return await handleStop(event, { provider: options.provider });
       case "stop-soft":
-        return await handleStop(event, { allowBlock: false });
+        return await handleStop(event, { allowBlock: false, provider: options.provider });
       default:
         return { code: 0 };
     }
@@ -518,6 +536,7 @@ function readStdin(): Promise<string> {
 
 export async function main(argv: string[]): Promise<number> {
   const sub = argv[0] ?? "";
+  const provider = providerFromArgv(argv.slice(1));
   const raw = await readStdin();
   let event: HookEvent = {};
   if (raw.trim()) {
@@ -527,7 +546,7 @@ export async function main(argv: string[]): Promise<number> {
       event = {};
     }
   }
-  const result = await runHook(sub, event);
+  const result = await runHook(sub, event, { provider });
   if (result.stdout) process.stdout.write(result.stdout);
   if (result.stderr) process.stderr.write(result.stderr);
   return result.code;
