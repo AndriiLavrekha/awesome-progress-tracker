@@ -26,6 +26,7 @@ function summary(overrides: Partial<ProjectSummary> = {}): ProjectSummary {
     resumeSnapshot: "Summary",
     nextAction: "Continue",
     blockers: "None",
+    lastRuntime: "",
     ...overrides
   };
 }

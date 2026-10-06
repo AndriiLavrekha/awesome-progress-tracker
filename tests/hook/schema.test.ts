@@ -150,3 +150,22 @@ describe("handoff frontmatter", () => {
     expect(validateFrontmatter(baseFrontmatter({ session_id: "anything at all" }))).toEqual([]);
   });
 });
+
+describe("last runtime frontmatter", () => {
+  it("registers the three runtime keys as optional and accepts any scalar", () => {
+    expect(OPTIONAL_FRONTMATTER).toContain("provider_last_used");
+    expect(OPTIONAL_FRONTMATTER).toContain("model_last_used");
+    expect(OPTIONAL_FRONTMATTER).toContain("effort_last_used");
+    expect(validateFrontmatter(baseFrontmatter())).toEqual([]);
+    expect(
+      validateFrontmatter(
+        baseFrontmatter({
+          provider_last_used: "some-new-app",
+          model_last_used: "grok-4.7",
+          effort_last_used: "high"
+        })
+      )
+    ).toEqual([]);
+    expect(validateFrontmatter(baseFrontmatter({ provider_last_used: true, model_last_used: 10 }))).toEqual([]);
+  });
+});

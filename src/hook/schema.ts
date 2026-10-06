@@ -53,6 +53,9 @@ export const OPTIONAL_FRONTMATTER = [
   "checkpoint_at",
   "session_id",
   "handoff",
+  "provider_last_used",
+  "model_last_used",
+  "effort_last_used",
   ...GATE_KEYS
 ] as const;
 

@@ -39,6 +39,7 @@ function indexSummary(overrides: Partial<ProjectSummary>): ProjectSummary {
     resumeSnapshot: "Summary",
     nextAction: "Continue",
     blockers: "None",
+    lastRuntime: "",
     ...overrides
   };
 }
@@ -185,7 +186,8 @@ describe("MCP server tools", () => {
       commitProgress: true,
       resumeSnapshot: longText,
       nextAction: longText,
-      blockers: longText
+      blockers: longText,
+      lastRuntime: longText
     }));
 
     const bounded = boundProjectSummaries(summaries, { maxProjects: 2, maxStringLength: 12 });
@@ -200,6 +202,12 @@ describe("MCP server tools", () => {
     expect(bounded[0].resumeSnapshot).toBe("abcdefghi...");
     expect(bounded[0].nextAction).toBe("abcdefghi...");
     expect(bounded[0].blockers).toBe("abcdefghi...");
+    expect(bounded[0].lastRuntime).toBe("abcdefghi...");
+    expect("lastRuntime" in compactProjectListItem(indexSummary({}))).toBe(false);
+    const missingRuntime = boundProjectSummaries([
+      { ...indexSummary({}), lastRuntime: undefined as never }
+    ]);
+    expect(missingRuntime[0].lastRuntime).toBe("");
   });
 
   it("resolves a unique project by name", async () => {

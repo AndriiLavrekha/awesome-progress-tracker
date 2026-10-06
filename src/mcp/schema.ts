@@ -23,4 +23,5 @@ export interface ProjectSummary {
   resumeSnapshot: string;
   nextAction: string;
   blockers: string;
+  lastRuntime: string;
 }
