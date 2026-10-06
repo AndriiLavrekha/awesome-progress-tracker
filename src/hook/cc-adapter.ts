@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { bodyHash, sha256 } from "../hash.js";
-import { extractSection, parseFrontmatter } from "../mcp/markdown.js";
+import { extractSection, parseFrontmatter, renderLastRuntime } from "../mcp/markdown.js";
 import { replaceFrontmatterValue, writeFileAtomic } from "../mcp/writer.js";
 import { readProjectTrackingState, setProjectTrackingState } from "../project-state.js";
 // defaultGitRunner's implementation lives in checkpoint.ts, not here.
@@ -270,6 +270,9 @@ export async function handleSessionStart(event: HookEvent): Promise<HookResult> 
       "Next Action, Blockers) before finishing meaningful work.",
     `Project: ${frontmatter.project ?? "(unknown)"} | Status: ${frontmatter.status ?? "?"} | Updated: ${frontmatter.updated ?? "?"}`
   ];
+
+  const runtime = renderLastRuntime(frontmatter);
+  if (runtime) lines.push(`\n${runtime}`);
 
   // Drift is pushed before Resume Snapshot/Next Action/Blockers so the agent
   // is warned that the recorded state may be stale before it absorbs that

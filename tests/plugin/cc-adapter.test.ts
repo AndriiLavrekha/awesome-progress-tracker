@@ -1013,3 +1013,86 @@ describe("cc-adapter session handoff", () => {
     });
   });
 });
+
+describe("cc-adapter last runtime", () => {
+  it("injects the runtime line after the project status and before the snapshot", async () => {
+    await withTrackerHome(async () => {
+      const dir = await makeRepo();
+      const model = "m".repeat(81);
+      const file = await writeProgress(
+        dir,
+        progressDoc({
+          project: "Runtime",
+          provider_last_used: "grok",
+          agent_last_used: "grok",
+          model_last_used: model,
+          effort_last_used: "unknown",
+          updated: "2026-10-06"
+        })
+      );
+      await commitAll(dir, "init");
+
+      const result = await handleSessionStart({ cwd: dir, session_id: "runtime-one" });
+      const context = JSON.parse(result.stdout!).hookSpecificOutput.additionalContext as string;
+      const line = `Last runtime: provider grok · agent grok · model ${"m".repeat(79)}… · updated 2026-10-06`;
+      expect(context).toContain(line);
+      expect(context.indexOf(line)).toBeGreaterThan(context.indexOf("Project:"));
+      expect(context.indexOf(line)).toBeLessThan(context.indexOf("Resume Snapshot:"));
+
+      const frontmatter = parseFrontmatter(await fs.readFile(file, "utf-8"));
+      expect(frontmatter.provider_last_used).toBe("grok");
+      expect(frontmatter.model_last_used).toBe(model);
+      expect(frontmatter.effort_last_used).toBe("unknown");
+    });
+  });
+
+  it("stays quiet for a legacy file and for unknown runtime fields", async () => {
+    await withTrackerHome(async () => {
+      const dir = await makeRepo();
+      await writeProgress(dir, progressDoc({ project: "Legacy", agent_last_used: "claude", updated: "2026-08-20" }));
+      await commitAll(dir, "init");
+
+      const legacy = await handleSessionStart({ cwd: dir, session_id: "runtime-legacy" });
+      expect(JSON.parse(legacy.stdout!).hookSpecificOutput.additionalContext).not.toContain("Last runtime:");
+    });
+  });
+
+  it("shows a model-only line and a boolean provider without rewriting them", async () => {
+    await withTrackerHome(async () => {
+      const dir = await makeRepo();
+      const file = await writeProgress(
+        dir,
+        progressDoc({ project: "Scalars", provider_last_used: "false", model_last_used: "grok-4.7" })
+      );
+      await commitAll(dir, "init");
+
+      const result = await handleSessionStart({ cwd: dir, session_id: "runtime-bool" });
+      const context = JSON.parse(result.stdout!).hookSpecificOutput.additionalContext as string;
+      expect(context).toContain("Last runtime: provider false · model grok-4.7");
+      const frontmatter = parseFrontmatter(await fs.readFile(file, "utf-8"));
+      expect(frontmatter.provider_last_used).toBe(false);
+      expect(frontmatter.model_last_used).toBe("grok-4.7");
+    });
+  });
+
+  it("shows a model-only line and omits an unknown provider", async () => {
+    await withTrackerHome(async () => {
+      const dir = await makeRepo();
+      await writeProgress(
+        dir,
+        progressDoc({
+          project: "ModelOnly",
+          provider_last_used: "unknown",
+          model_last_used: "grok-4.7",
+          effort_last_used: "unknown"
+        })
+      );
+      await commitAll(dir, "init");
+
+      const result = await handleSessionStart({ cwd: dir, session_id: "runtime-model" });
+      const context = JSON.parse(result.stdout!).hookSpecificOutput.additionalContext as string;
+      expect(context).toContain("Last runtime: model grok-4.7");
+      expect(context).not.toContain("provider unknown");
+    });
+  });
+});
