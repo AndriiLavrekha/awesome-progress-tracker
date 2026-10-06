@@ -42,7 +42,7 @@
 
 ## Claude Code plugin
 
-- [ ] `npm run build` was re-run and the updated `dist/` is committed (the plugin runs from the
+- [x] `npm run build` was re-run and the updated `dist/` is committed (the plugin runs from the
       cloned repo with no build step, so committed `dist/` must match `src/`).
 - [x] `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` agree on the plugin name.
 - [x] `.mcp.json` points at `${CLAUDE_PLUGIN_ROOT}/dist/src/mcp/server.js`.
