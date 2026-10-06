@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { bodyHash, sha256 } from "../hash.js";
-import { extractSection, parseFrontmatter } from "../mcp/markdown.js";
+import { extractSection, isKnownRuntimeValue, parseFrontmatter, renderLastRuntime } from "../mcp/markdown.js";
 import { replaceFrontmatterValue, writeFileAtomic } from "../mcp/writer.js";
 import { readProjectTrackingState, setProjectTrackingState } from "../project-state.js";
 // defaultGitRunner's implementation lives in checkpoint.ts, not here.
@@ -122,7 +122,18 @@ async function bestEffortMarkHandoff(progressPath, handoff, sessionId) {
         return false;
     }
 }
-async function bestEffortRecordSessionEnd(cwd, progressPath, now = new Date()) {
+export function normalizeProviderSlug(value) {
+    if (!value || !/^[a-z0-9][a-z0-9-]{0,40}$/.test(value))
+        return undefined;
+    return value;
+}
+export function providerFromArgv(argv) {
+    const index = argv.indexOf("--provider");
+    if (index === -1)
+        return undefined;
+    return normalizeProviderSlug(argv[index + 1]);
+}
+async function bestEffortRecordSessionEnd(cwd, progressPath, now = new Date(), provider) {
     try {
         const markdown = await fs.readFile(progressPath, "utf-8");
         const expectedHash = sha256(markdown);
@@ -133,6 +144,10 @@ async function bestEffortRecordSessionEnd(cwd, progressPath, now = new Date()) {
             updated = replaceFrontmatterValue(updated, "base_branch", fields.base_branch);
             updated = replaceFrontmatterValue(updated, "worktree_dirty", String(fields.worktree_dirty));
             updated = replaceFrontmatterValue(updated, "checkpoint_at", fields.checkpoint_at);
+        }
+        const slug = normalizeProviderSlug(provider);
+        if (slug && isKnownRuntimeValue(parseFrontmatter(markdown).provider_last_used) === null) {
+            updated = replaceFrontmatterValue(updated, "provider_last_used", slug);
         }
         // writeFileAtomic throws "Progress file changed on disk" when another
         // writer (e.g. an MCP update_project_progress call) raced us and won.
@@ -220,6 +235,9 @@ export async function handleSessionStart(event) {
             "Next Action, Blockers) before finishing meaningful work.",
         `Project: ${frontmatter.project ?? "(unknown)"} | Status: ${frontmatter.status ?? "?"} | Updated: ${frontmatter.updated ?? "?"}`
     ];
+    const runtime = renderLastRuntime(frontmatter);
+    if (runtime)
+        lines.push(`\n${runtime}`);
     // Drift is pushed before Resume Snapshot/Next Action/Blockers so the agent
     // is warned that the recorded state may be stale before it absorbs that
     // state, not after.
@@ -357,7 +375,7 @@ export async function handleStop(event, options = {}) {
     if (!stale) {
         // Only stamp when the agent actually updated Progress.md this session.
         // Stamping an unchanged file would assert a verification that never happened.
-        const recorded = await bestEffortRecordSessionEnd(cwd, progressPath);
+        const recorded = await bestEffortRecordSessionEnd(cwd, progressPath, new Date(), options.provider);
         if (!recorded) {
             warnings.push("Checkpoint and handoff were not recorded; drift detection may be unavailable next session.");
         }
@@ -391,7 +409,7 @@ export async function handleStop(event, options = {}) {
     // Claude Code and Codex; keep the "[project-progress]" prefix for grep-ability.
     return { code: 0, stdout: emitJson({ systemMessage: message }) };
 }
-export async function runHook(sub, event) {
+export async function runHook(sub, event, options = {}) {
     try {
         switch (sub) {
             case "session-start":
@@ -403,9 +421,9 @@ export async function runHook(sub, event) {
             case "pre-edit":
                 return await handlePreEdit(event);
             case "stop":
-                return await handleStop(event);
+                return await handleStop(event, { provider: options.provider });
             case "stop-soft":
-                return await handleStop(event, { allowBlock: false });
+                return await handleStop(event, { allowBlock: false, provider: options.provider });
             default:
                 return { code: 0 };
         }
@@ -432,6 +450,7 @@ function readStdin() {
 }
 export async function main(argv) {
     const sub = argv[0] ?? "";
+    const provider = providerFromArgv(argv.slice(1));
     const raw = await readStdin();
     let event = {};
     if (raw.trim()) {
@@ -442,7 +461,7 @@ export async function main(argv) {
             event = {};
         }
     }
-    const result = await runHook(sub, event);
+    const result = await runHook(sub, event, { provider });
     if (result.stdout)
         process.stdout.write(result.stdout);
     if (result.stderr)

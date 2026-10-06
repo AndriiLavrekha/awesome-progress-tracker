@@ -72,7 +72,8 @@ export function boundProjectSummaries(projects, options = {}) {
         deploymentUrl: boundString(project.deploymentUrl, maxStringLength),
         resumeSnapshot: boundString(project.resumeSnapshot, maxStringLength),
         nextAction: boundString(project.nextAction, maxStringLength),
-        blockers: boundString(project.blockers, maxStringLength)
+        blockers: boundString(project.blockers, maxStringLength),
+        lastRuntime: boundString(project.lastRuntime, maxStringLength)
     }));
 }
 export function compactProjectListItem(project) {

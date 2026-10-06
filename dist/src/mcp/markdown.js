@@ -113,6 +113,39 @@ function projectDirectoryFrom(progressPath) {
     const segments = progressPath.replace(/\\/g, "/").replace(/\/+$/, "").split("/");
     return segments.length < 3 ? "" : segments.slice(0, -2).join("/");
 }
+const RUNTIME_PARTS = [
+    ["provider", "provider_last_used"],
+    ["agent", "agent_last_used"],
+    ["model", "model_last_used"],
+    ["effort", "effort_last_used"],
+    ["updated", "updated"]
+];
+const RUNTIME_TRIGGERS = ["provider_last_used", "model_last_used", "effort_last_used"];
+export function isKnownRuntimeValue(value) {
+    if (value === undefined)
+        return null;
+    const text = String(value).trim();
+    if (text === "" || text.toLowerCase() === "unknown")
+        return null;
+    return text;
+}
+function displayRuntimeValue(value) {
+    if (value.length <= 80)
+        return value;
+    return `${value.slice(0, 79)}…`;
+}
+export function renderLastRuntime(frontmatter) {
+    const triggered = RUNTIME_TRIGGERS.some((key) => isKnownRuntimeValue(frontmatter[key]) !== null);
+    if (!triggered)
+        return "";
+    const parts = [];
+    for (const [label, key] of RUNTIME_PARTS) {
+        const known = isKnownRuntimeValue(frontmatter[key]);
+        if (known)
+            parts.push(`${label} ${displayRuntimeValue(known)}`);
+    }
+    return `Last runtime: ${parts.join(" · ")}`;
+}
 export function parseProjectSummary(markdown, progressPath = "") {
     const frontmatter = parseFrontmatter(markdown);
     return {
@@ -130,6 +163,7 @@ export function parseProjectSummary(markdown, progressPath = "") {
         commitProgress: booleanValue(frontmatter.commit_progress),
         resumeSnapshot: extractSection(markdown, "Resume Snapshot"),
         nextAction: extractSection(markdown, "Next Action"),
-        blockers: extractSection(markdown, "Blockers")
+        blockers: extractSection(markdown, "Blockers"),
+        lastRuntime: renderLastRuntime(frontmatter)
     };
 }
