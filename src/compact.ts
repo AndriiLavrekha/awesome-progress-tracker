@@ -1,5 +1,6 @@
 import { repairEncoding } from "./encoding.js";
 import { scanLines, splitFrontmatter } from "./mcp/markdown.js";
+import type { ScannedLine } from "./mcp/markdown.js";
 import { ALLOWED_PROGRESS_SECTIONS, foldDoneSection } from "./mcp/writer.js";
 
 // The template ships `## Verification`, which the MCP write tool does not
@@ -111,4 +112,107 @@ export function renderArchiveRun(date: string, sources: ArchiveSource[]): string
     .filter((source) => source.blocks.length > 0)
     .map((source) => `### From ${source.file}\n\n${source.blocks.map((block) => demoteHeadings(block.trimEnd(), 2)).join("\n\n")}\n`);
   return parts.length === 0 ? "" : `## Compacted ${date}\n\n${parts.join("\n")}`;
+}
+
+const DATE_RE = /\d{4}-\d{2}-\d{2}/;
+const TIME_RE = /\b\d{2}:\d{2}\b/;
+
+// "YYYY-MM-DD HH:MM"; an entry without a time sorts as 00:00 on its day.
+function sortKey(title: string): string | undefined {
+  const date = title.match(DATE_RE);
+  if (!date) return undefined;
+  const time = title.slice((date.index ?? 0) + date[0].length).match(TIME_RE);
+  return `${date[0]} ${time ? time[0] : "00:00"}`;
+}
+
+export function compactSessionLog(text: string): CompactResult {
+  const { frontmatter, body } = splitFrontmatter(repairEncoding(text));
+  const head: Block[] = [];
+  const moved: string[] = [];
+  const entries: Array<{ block: Block; key?: string; index: number }> = [];
+  let titleSeen = false;
+
+  for (const block of splitBlocks(body)) {
+    if (block.level === 2) {
+      entries.push({ block, key: sortKey(block.title), index: entries.length });
+    } else if (block.level === 0 || !titleSeen) {
+      if (block.level === 1) titleSeen = true;
+      head.push(block);
+    } else {
+      moved.push(block.text);
+    }
+  }
+
+  const dated = entries
+    .filter((item) => item.key !== undefined)
+    .sort((a, b) => a.key!.localeCompare(b.key!) || a.index - b.index);
+  const keep = new Set(dated.slice(-SESSION_LOG_KEEP));
+  moved.push(...entries.filter((item) => item.key !== undefined && !keep.has(item)).map((item) => item.block.text));
+
+  const undated = entries.filter((item) => item.key === undefined);
+  const notes = undated.length > 0 ? [`Session Log.md: ${undated.length} undated entries kept`] : [];
+  const kept = [...head, ...undated.map((item) => item.block), ...dated.filter((item) => keep.has(item)).map((item) => item.block)];
+  return { kept: joinBlocks(frontmatter, kept), moved: dedupe(moved), folded: [], notes };
+}
+
+const OPEN_TASK_RE = /^\s*[-*] \[ \](\s|$)/;
+const CHECKED_TASK_RE = /^[-*] \[[xX]\](\s|$)/;
+
+function hasOpenTask(lines: ScannedLine[]): boolean {
+  return lines.some((line) => !line.inFence && OPEN_TASK_RE.test(line.text));
+}
+
+function moveCheckedTasks(blocks: Block[]): { kept: Block[]; groups: string[] } {
+  const scanned = new Map(blocks.map((block) => [block, scanLines(block.text)] as const));
+  const tasks: Array<{ block: Block; start: number; end: number; heading: string }> = [];
+
+  for (const block of blocks) {
+    const lines = scanned.get(block)!;
+    for (let index = 0; index < lines.length; index += 1) {
+      if (lines[index].inFence || !CHECKED_TASK_RE.test(lines[index].text)) continue;
+      // The task runs through its last indented line, across blank lines.
+      let end = index + 1;
+      for (let next = index + 1; next < lines.length; next += 1) {
+        if (/^\s+\S/.test(lines[next].text)) end = next + 1;
+        else if (lines[next].text.trim() !== "") break;
+      }
+      const task = lines.slice(index, end);
+      // Moving part of a fence would leave an unclosed fence in both files.
+      if (!task.some((line) => line.inFence) && !hasOpenTask(task)) {
+        tasks.push({ block, start: index, end, heading: block.level === 0 ? "Tasks" : block.title });
+      }
+      index = end - 1;
+    }
+  }
+
+  const moving = tasks.slice(0, Math.max(0, tasks.length - TASKS_KEEP_CHECKED));
+  if (moving.length === 0) return { kept: blocks, groups: [] };
+
+  const groups = new Map<string, string[]>();
+  const dropped = new Map<Block, Set<number>>();
+  for (const task of moving) {
+    const lines = scanned.get(task.block)!.slice(task.start, task.end).map((line) => line.text);
+    groups.set(task.heading, [...(groups.get(task.heading) ?? []), ...lines]);
+    const drop = dropped.get(task.block) ?? new Set<number>();
+    for (let index = task.start; index < task.end; index += 1) drop.add(index);
+    dropped.set(task.block, drop);
+  }
+
+  const kept = blocks.map((block) => {
+    const drop = dropped.get(block);
+    if (!drop) return block;
+    const text = scanned.get(block)!.filter((_, index) => !drop.has(index)).map((line) => `${line.text}\n`).join("");
+    return { ...block, text };
+  });
+  return { kept, groups: [...groups].map(([title, lines]) => `## ${title}\n\n${lines.join("\n")}\n`) };
+}
+
+export function compactTasks(text: string): CompactResult {
+  const { frontmatter, body } = splitFrontmatter(repairEncoding(text));
+  const blocks = splitBlocks(body);
+  const finished = blocks.filter((block) => block.level === 2 && !hasOpenTask(scanLines(block.text)));
+  const movedBlocks = new Set(finished.slice(0, Math.max(0, finished.length - TASKS_KEEP_FINISHED_BLOCKS)));
+  const { kept, groups } = moveCheckedTasks(blocks.filter((block) => !movedBlocks.has(block)));
+  const moved = [...blocks.filter((block) => movedBlocks.has(block)).map((block) => block.text), ...groups];
+  return { kept: joinBlocks(frontmatter, kept), moved: dedupe(moved), folded: [], notes: [] };
 }

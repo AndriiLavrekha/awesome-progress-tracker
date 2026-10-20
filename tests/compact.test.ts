@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compactProgress, renderArchiveRun, type CompactResult } from "../src/compact.js";
+import { compactProgress, compactSessionLog, compactTasks, renderArchiveRun, type CompactResult } from "../src/compact.js";
 import { repairEncoding } from "../src/encoding.js";
 
 const FM = "---\nproject: Demo\nstatus: active\n---\n";
@@ -94,5 +94,84 @@ describe("renderArchiveRun", () => {
   it("renders nothing without moved blocks and never shifts fenced lines", () => {
     expect(renderArchiveRun("2026-10-20", [{ file: "Tasks.md", blocks: [] }])).toBe("");
     expect(renderArchiveRun("2026-10-20", [{ file: "X", blocks: ["## A\n\n```\n## fenced\n```\n"] }])).toContain("```\n## fenced\n```");
+  });
+});
+
+const entry = (heading: string) => `## ${heading}\n\n${heading} details.\n`;
+const headings = (text: string) => text.match(/^## .*$/gm) ?? [];
+
+describe("compactSessionLog", () => {
+  it("keeps the newest 20 dated entries oldest to newest and moves the rest", () => {
+    const dates = Array.from({ length: 25 }, (_, i) => `2026-09-${String(i + 1).padStart(2, "0")}`);
+    const mixed = [...dates.slice(10), ...dates.slice(0, 10)];
+    const input = `# Session Log\n\n${mixed.map(entry).join("\n")}`;
+    const result = compactSessionLog(input);
+    expect(headings(result.kept)).toEqual(dates.slice(5).map((d) => `## ${d}`));
+    expect(result.moved.map((block) => block.split("\n")[0])).toEqual(dates.slice(0, 5).map((d) => `## ${d}`));
+    expectConserved(input, result);
+    expect(compactSessionLog(result.kept)).toEqual({ ...result, moved: [] });
+  });
+
+  it("breaks same-day ties by HH:MM, then by file position", () => {
+    const input = `# Session Log\n\n${[entry("2026-10-01 18:00 late"), entry("2026-10-01 09:00 early"), entry("2026-10-01 09:00 early-second")].join("\n")}`;
+    expect(headings(compactSessionLog(input).kept)).toEqual([
+      "## 2026-10-01 09:00 early",
+      "## 2026-10-01 09:00 early-second",
+      "## 2026-10-01 18:00 late"
+    ]);
+  });
+
+  it("keeps undated entries ahead of dated ones and moves a second H1", () => {
+    const input = `# Session Log\n\n${entry("2026-10-02 b")}\n${entry("Respawn checkpoint")}\n# Session Log\n\n${entry("2026-10-01 a")}`;
+    const result = compactSessionLog(input);
+    expect(headings(result.kept)).toEqual(["## Respawn checkpoint", "## 2026-10-01 a", "## 2026-10-02 b"]);
+    expect(result.moved.map((block) => block.trim())).toEqual(["# Session Log"]);
+    expect(result.notes).toEqual(["Session Log.md: 1 undated entries kept"]);
+  });
+});
+
+describe("compactTasks", () => {
+  it("moves finished blocks beyond the newest 3", () => {
+    const finished = Array.from({ length: 5 }, (_, i) => `## Checkpoint ${i}\n\nprose ${i}\n`);
+    const input = `# Tasks\n\n## Active\n\n- [ ] open\n\n${finished.join("\n")}`;
+    const result = compactTasks(input);
+    expect(result.moved.map((block) => block.split("\n")[0])).toEqual(["## Checkpoint 0", "## Checkpoint 1"]);
+    expect(headings(result.kept)).toEqual(["## Active", "## Checkpoint 2", "## Checkpoint 3", "## Checkpoint 4"]);
+    expectConserved(input, result);
+  });
+
+  it("moves old checked tasks with children, grouped by heading, never one with an open child", () => {
+    const done = Array.from({ length: 12 }, (_, i) => `- [x] done ${i}\n  - note ${i}`).join("\n");
+    const input = `# Tasks\n\n## Active\n\n- [ ] open one\n- [X] parent\n  - [ ] open child\n${done}\n`;
+    const result = compactTasks(input);
+    expect(result.moved).toEqual(["## Active\n\n- [x] done 0\n  - note 0\n- [x] done 1\n  - note 1\n"]);
+    expect(result.kept).toContain("- [X] parent\n  - [ ] open child");
+    expect(result.kept).toContain("- [x] done 11\n  - note 11");
+    expect(result.kept).not.toContain("note 0");
+    expectConserved(input, result);
+    expect(compactTasks(result.kept).moved).toEqual([]);
+  });
+
+  it("moves a checked task's indented continuation after a blank line", () => {
+    const rest = Array.from({ length: 10 }, (_, i) => `- [x] later ${i}`).join("\n");
+    const result = compactTasks(`# Tasks\n\n- [x] first\n\n  continued\n${rest}\n`);
+    expect(result.moved).toEqual(["## Tasks\n\n- [x] first\n\n  continued\n"]);
+    expect(result.kept).not.toContain("continued");
+  });
+
+  it("keeps a checked task whose lines touch a fence", () => {
+    const rest = Array.from({ length: 10 }, (_, i) => `- [x] later ${i}`).join("\n");
+    const result = compactTasks(`# Tasks\n\n## Active\n\n- [x] first\n  \`\`\`\ncode\n  \`\`\`\n${rest}\n`);
+    expect(result.moved).toEqual([]);
+  });
+
+  it("ignores task markers inside fenced code", () => {
+    const fenced = "```\n" + Array.from({ length: 12 }, (_, i) => `- [x] fenced ${i}`).join("\n") + "\n```\n";
+    expect(compactTasks(`# Tasks\n\n## Active\n\n- [ ] open\n\n${fenced}`).moved).toEqual([]);
+  });
+
+  it("leaves a small file unchanged", () => {
+    const input = "# Tasks\n\n- [ ] a\n- [x] b\n";
+    expect(compactTasks(input)).toEqual({ kept: input, moved: [], folded: [], notes: [] });
   });
 });
