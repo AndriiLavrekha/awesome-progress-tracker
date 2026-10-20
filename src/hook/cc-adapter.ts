@@ -272,7 +272,10 @@ function boundedContext(value: string, maxLength: number): string {
 // awesome-progress-tracker binary is usually not on PATH.
 function compactCommand(cwd: string): string {
   const cli = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "cli.js");
-  return `node "${cli}" compact "${cwd}"`;
+  // A trailing separator before the closing quote would escape it on Windows.
+  const trimmed = cwd.replace(/[\\/]+$/, "");
+  const dir = trimmed === "" || trimmed.endsWith(":") ? `${cwd.slice(0, trimmed.length + 1)}.` : trimmed;
+  return `node "${cli}" compact "${dir}"`;
 }
 
 async function bestEffortHealth(progressPath: string): Promise<HealthFinding[]> {
@@ -494,8 +497,8 @@ export async function handleStop(event: HookEvent, options: HandleStopOptions = 
     if (!sessionState.healthShown) {
       const health = await bestEffortHealth(progressPath);
       const problems = [
-        ...errors.filter((error) => !error.includes("secret-like")),
-        ...health.map((finding) => finding.message)
+        ...health.map((finding) => finding.message),
+        ...errors.filter((error) => !error.includes("secret-like"))
       ];
       if (problems.length > 0) {
         const command = health.some((finding) => finding.remedy === "compact") ? compactCommand(cwd) : undefined;

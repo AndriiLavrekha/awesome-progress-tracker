@@ -173,6 +173,16 @@ describe("cc-adapter session-start", () => {
       expect(context).not.toContain("Progress health");
     });
   });
+
+  it("quotes the compact target without a trailing separator", async () => {
+    await withTrackerHome(async () => {
+      const dir = await makeRepo();
+      await writeProgress(dir, `${progressDoc({})}\n## Historical Notes\n\nold\n`);
+      const result = await handleSessionStart({ cwd: `${dir}${path.sep}`, session_id: `health-sep-${Date.now()}` });
+      const context = JSON.parse(result.stdout!).hookSpecificOutput.additionalContext as string;
+      expect(context).toContain(` compact "${dir}"`);
+    });
+  });
 });
 
 describe("cc-adapter user-prompt-submit", () => {
@@ -803,6 +813,23 @@ describe("cc-adapter body-hash freshness", () => {
 
       const second = await handleStop({ cwd: dir, session_id: sessionId });
       expect(second.stdout ?? "").not.toContain("compact would move");
+    });
+  });
+
+  it("keeps the compact finding visible when validator errors would crowd it out", async () => {
+    await withTrackerHome(async () => {
+      const dir = await makeRepo();
+      const file = await writeProgress(dir, `${progressDoc({ status: "in_progress", sensitivity: "bogus", deployed: "maybe" })}\n## Historical Notes\n\nold\n`);
+      await commitAll(dir, "init");
+      await fs.writeFile(path.join(dir, "src.txt"), "work", "utf-8");
+
+      const sessionId = `s-crowd-${Date.now()}`;
+      await handleSessionStart({ cwd: dir, session_id: sessionId });
+      const current = await fs.readFile(file, "utf-8");
+      await fs.writeFile(file, current.replace("Wire the widget.", "Ship the widget."), "utf-8");
+
+      const first = await handleStop({ cwd: dir, session_id: sessionId });
+      expect(first.stdout).toContain("compact would move Progress.md 1 blocks");
     });
   });
 

@@ -85,7 +85,7 @@ export async function checkProgressHealth(progressDir: string): Promise<HealthFi
   const moves = [...plan.moved].map(([name, headings]) => `${name} ${headings.length} blocks`);
   if (plan.folded.length > 0) moves.push(`${plan.folded.length} Done lines`);
   if (moves.length > 0) findings.push({ message: `compact would move ${moves.join(", ")}`, remedy: "compact" });
-  for (const name of plan.repaired) findings.push({ message: `garbled characters in ${name}`, remedy: "compact" });
+  if (plan.repaired.length > 0) findings.push({ message: `garbled characters in ${plan.repaired.join(", ")}`, remedy: "compact" });
 
   const progress = plan.outputs.get("Progress.md") ?? texts.get("Progress.md");
   if (progress !== undefined) {

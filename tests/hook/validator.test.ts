@@ -68,4 +68,13 @@ describe("checkProgressHealth", () => {
       { message: "Progress.md Next Action is 4100 characters (budget 4000)", remedy: "edit" }
     ]);
   });
+
+  it("names every garbled file in one finding", async () => {
+    const valid = (await fs.readFile("tests/fixtures/valid-project/project-progress/Progress.md", "utf-8")).replace(/\r\n/g, "\n");
+    const garbled = "# Notes\n\n\u00e2\u20ac\u201d\n";
+    const dir = await folder({ "Progress.md": valid, "Decisions.md": garbled, "Open Questions.md": garbled });
+    expect(await checkProgressHealth(dir)).toEqual([
+      { message: "garbled characters in Decisions.md, Open Questions.md", remedy: "compact" }
+    ]);
+  });
 });
