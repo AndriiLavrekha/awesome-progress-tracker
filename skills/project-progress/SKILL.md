@@ -86,7 +86,9 @@ On every meaningful `Progress.md` update, set these frontmatter fields together 
 
 Keep entries compact. Prefer links to files over pasted logs or long code blocks.
 
-When `Done` grows large, the `update_project_progress` MCP tool automatically folds the oldest completed items out of `Progress.md` into `Archive.md`, keeping the most recent items in place. `Archive.md` is not part of the default token-conscious read order; read it only when explicitly asked about older completed work.
+When `Done` grows large, the `update_project_progress` MCP tool folds the oldest completed items into `Archive.md`. Old text from any other section also belongs in `Archive.md`: never add `Historical …` or other new `##` sections to `Progress.md`, and never create `*-History-*.md` files or a second session log. Append each `Session Log.md` entry at the bottom with a heading `## YYYY-MM-DD HH:MM <topic>`.
+
+When session start shows a `Progress health:` line, or the stop hook reports progress file problems that name a `compact` command, run that command to preview the cleanup, then run it again with `--write`, as its own step. The rewrite counts as a `Progress.md` update for the stop hook, so still update `Resume Snapshot`, `Next Action`, and `Blockers` when you did other work. Problems marked for editing need you to shorten or fill the named sections. `Archive.md` is not part of the default token-conscious read order; read it only when explicitly asked about older work.
 
 Set verification gates with `set_project_gates` whenever you learn something
 about the project's state: after running the test suite, after a review, after

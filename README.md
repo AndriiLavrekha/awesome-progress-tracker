@@ -240,6 +240,17 @@ These wrappers run the compiled hook (`dist/src/hook/cli.js`) on Node — run `n
 
 </details>
 
+## Keep Progress Files Small
+
+Hooks report when progress files grow: session start shows a `Progress health:` line and the stop hook lists problems once per session. `compact` moves old history into `Archive.md` without rewriting it:
+
+```bash
+awesome-progress-tracker compact            # preview what moves
+awesome-progress-tracker compact --write    # apply
+```
+
+It moves unknown `Progress.md` sections, Session Log entries beyond the newest 20, finished `Tasks.md` sections (any `##` section without an open task, so keep reference notes elsewhere), and old checked tasks, and repairs garbled characters. Commit before running `--write` so the move is one reviewable diff.
+
 ## MCP Server
 
 ```bash
