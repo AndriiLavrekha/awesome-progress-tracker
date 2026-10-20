@@ -311,12 +311,12 @@ describe("compactProject", () => {
     expect(withWritten("boom", ["Archive.md", "Progress.md"])).toBe("boom Already written: Archive.md, Progress.md.");
   });
 
-  it("labels a whitespace-only write", async () => {
+  it("labels a write that moved no blocks", async () => {
     const root = await project({ "Progress.md": `${progress()}\n\n` });
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
     try {
       await runCli(["compact", root, "--write"]);
-      expect(log.mock.calls[0][0]).toBe("compact: written (whitespace only)");
+      expect(log.mock.calls[0][0]).toBe("compact: written (no blocks moved)");
     } finally {
       log.mockRestore();
     }

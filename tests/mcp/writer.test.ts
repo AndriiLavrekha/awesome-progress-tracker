@@ -240,6 +240,23 @@ describe("updateArchiveFile", () => {
     expect(await fs.readFile(archivePath, "utf-8")).toBe("# Archive\nother\n");
   });
 
+  it("refuses a non-UTF-8 Archive.md and leaves its bytes unchanged", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "pp-archive-"));
+    const archivePath = path.join(dir, "Archive.md");
+    const bytes = Buffer.from([...Buffer.from("# Archive\ncaf"), 0xe9, 0x0a]);
+    await fs.writeFile(archivePath, bytes);
+    await expect(updateArchiveFile(dir, (current) => `${current}one\n`)).rejects.toThrow("Archive.md is not valid UTF-8");
+    expect(Buffer.compare(await fs.readFile(archivePath), bytes)).toBe(0);
+  });
+
+  it("keeps a BOM when updating Archive.md", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "pp-archive-"));
+    const archivePath = path.join(dir, "Archive.md");
+    await fs.writeFile(archivePath, "﻿# Archive\n", "utf-8");
+    await updateArchiveFile(dir, (current) => `${current}one\n`);
+    expect(await fs.readFile(archivePath, "utf-8")).toBe("﻿# Archive\none\n");
+  });
+
   it("throws when Archive.md cannot be read", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "pp-archive-"));
     await fs.mkdir(path.join(dir, "Archive.md"));

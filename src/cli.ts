@@ -1232,12 +1232,12 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
 
   if (parsed.command === "compact") {
     const report = await compactProject({ targetDir: parsed.targetDir, write: parsed.write });
-    const whitespaceOnly =
+    const noBlocksMoved =
       report.folded === 0 && report.repaired.length === 0 && report.files.every((file) => file.moved.length === 0);
     console.log(
       report.written
-        ? whitespaceOnly
-          ? "compact: written (whitespace only)"
+        ? noBlocksMoved
+          ? "compact: written (no blocks moved)"
           : "compact: written"
         : parsed.write
           ? "compact: nothing to change"

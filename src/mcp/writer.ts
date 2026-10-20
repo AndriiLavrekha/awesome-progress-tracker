@@ -176,7 +176,13 @@ export async function updateArchiveFile(progressDir: string, transform: (current
   const archivePath = path.join(progressDir, "Archive.md");
   let current: string;
   try {
-    current = await fs.readFile(archivePath, "utf-8");
+    const bytes = await fs.readFile(archivePath);
+    try {
+      // Strict decode: a lossy one turns a Latin-1 byte into U+FFFD and the write below would persist it. ignoreBOM keeps a BOM, so the hash matches writeFileAtomic's utf-8 read.
+      current = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
+    } catch {
+      throw new Error("Archive.md is not valid UTF-8; convert it to UTF-8 first.");
+    }
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     try {
