@@ -8,7 +8,7 @@ import { readProjectIndex, refreshProjectIndex, upsertIndexedProject } from "./i
 import { extractSection, parseFrontmatter, parseProjectSummary } from "./markdown.js";
 import { sha256 } from "../hash.js";
 import path from "node:path";
-import { ALLOWED_PROGRESS_SECTIONS, MAX_LAST_MILESTONE_LENGTH, MAX_SECTION_CONTENT_LENGTH, appendToArchive, foldDoneSection, replaceFrontmatterValue, replaceSectionWithOperation, writeFileAtomic, ProgressConflictError, validateLastMilestone, validateSectionContent, validateSectionName } from "./writer.js";
+import { ALLOWED_PROGRESS_SECTIONS, MAX_LAST_MILESTONE_LENGTH, MAX_SECTION_CONTENT_LENGTH, appendToArchive, foldDoneSection, replaceFrontmatterValue, replaceSectionWithOperation, updateArchiveFile, writeFileAtomic, ProgressConflictError, validateLastMilestone, validateSectionContent, validateSectionName } from "./writer.js";
 import { listProjectTrackingStates, resetProjectTrackingState } from "../project-state.js";
 import { ALLOWED_GATE_VALUES, GATE_KEYS } from "../hook/schema.js";
 const DEFAULT_EXCLUDES = DEFAULT_DISCOVERY_EXCLUDES;
@@ -217,6 +217,24 @@ export function conflictPayload(currentMarkdown, options) {
     }
     return payload;
 }
+// Called after the guarded Progress.md write (ADR 0020). Progress.md has
+// already dropped these items, so a failed archive write hands them back
+// instead of losing them.
+export async function archiveFoldedItems(progressPath, items) {
+    if (items.length === 0)
+        return {};
+    try {
+        await updateArchiveFile(path.dirname(progressPath), (current) => appendToArchive(current, items));
+        return {};
+    }
+    catch (error) {
+        return {
+            archiveError: error instanceof Error ? error.message : String(error),
+            archiveHint: "Progress.md is saved. Archive.md was not updated; append unarchivedItems to Archive.md or add them back to Done.",
+            unarchivedItems: items
+        };
+    }
+}
 // Deliberately does NOT route through textResult. That helper collapses any
 // payload carrying a string `error` into errorResult("invalid_request", ...),
 // which would discard currentContent and currentFrontmatter — the entire
@@ -326,16 +344,19 @@ export function createServer() {
         catch (error) {
             return await conflictResult(error, match.progressPath, { section });
         }
+        // Right after the guarded write lands (ADR 0020), before anything else that can throw.
+        const archive = await archiveFoldedItems(match.progressPath, archived);
         await upsertIndexedProject(parseProjectSummary(updated, match.progressPath));
-        // Archiving only after the guarded write lands. Folding entries into
-        // Archive.md first would move Done items that were never removed from
-        // Progress.md when the write lost a race.
-        if (archived.length > 0) {
-            const archivePath = path.join(path.dirname(match.progressPath), "Archive.md");
-            const archiveMarkdown = await fs.readFile(archivePath, "utf-8").catch(() => "# Archive\n");
-            await fs.writeFile(archivePath, appendToArchive(archiveMarkdown, archived), "utf-8");
-        }
-        return textResult(JSON.stringify({ updated: true, operation: result.operation, project, section, archived: archived.length, updatedAt: new Date().toISOString(), progressPath: match.progressPath }));
+        return textResult(JSON.stringify({
+            updated: true,
+            operation: result.operation,
+            project,
+            section,
+            archived: archive.unarchivedItems ? 0 : archived.length,
+            ...archive,
+            updatedAt: new Date().toISOString(),
+            progressPath: match.progressPath
+        }));
     });
     server.registerTool("mark_project_status", {
         description: "Update frontmatter status and last_milestone in a project's Progress.md.",

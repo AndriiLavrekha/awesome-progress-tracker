@@ -36,14 +36,16 @@ export function parseFrontmatter(markdown) {
     }
     return frontmatter;
 }
-function sectionMatches(markdown) {
-    const matches = [];
+// One pass with the fence rules every heading and task parser shares: a fence
+// line, and every line between fences, is never a heading or a task.
+export function scanLines(markdown) {
+    const lines = [];
     let offset = 0;
     let fenceMarker;
     let fenceLength = 0;
     for (const line of splitLinesWithEndings(markdown)) {
-        const contentLine = line.replace(/\r?\n$|\r$/, "");
-        const fenceMatch = contentLine.match(FENCE_RE);
+        const text = line.replace(/\r?\n$|\r$/, "");
+        const fenceMatch = text.match(FENCE_RE);
         if (fenceMatch?.groups) {
             const fence = fenceMatch.groups.fence;
             const marker = fence[0];
@@ -57,26 +59,44 @@ function sectionMatches(markdown) {
                 fenceMarker = undefined;
                 fenceLength = 0;
             }
-            offset += line.length;
-            continue;
         }
-        if (fenceMarker === undefined) {
-            const sectionMatch = contentLine.match(SECTION_RE);
-            if (sectionMatch?.groups) {
-                matches.push({
-                    title: sectionMatch.groups.title.trim(),
-                    start: offset,
-                    bodyStart: offset + line.length
-                });
-            }
-        }
+        lines.push({
+            text,
+            offset,
+            length: line.length,
+            inFence: fenceMatch?.groups !== undefined || fenceMarker !== undefined
+        });
         offset += line.length;
+    }
+    return lines;
+}
+export function sectionMatches(markdown) {
+    const matches = [];
+    for (const line of scanLines(markdown)) {
+        if (line.inFence)
+            continue;
+        const sectionMatch = line.text.match(SECTION_RE);
+        if (sectionMatch?.groups) {
+            matches.push({
+                title: sectionMatch.groups.title.trim(),
+                start: line.offset,
+                bodyStart: line.offset + line.length
+            });
+        }
     }
     return matches;
 }
-function splitLinesWithEndings(markdown) {
+export function splitLinesWithEndings(markdown) {
     const lines = markdown.match(/[^\r\n]*(?:\r\n|\n|\r|$)/g) ?? [];
     return lines.filter((line, index) => line.length > 0 || index < lines.length - 1);
+}
+const FRONTMATTER_RE = /^---\r?\n(?:[\s\S]*?\r?\n)?---[ \t]*(?:\r?\n|$)/;
+// Callers strip a leading BOM first (repairEncoding), so the regex does not handle it.
+export function splitFrontmatter(markdown) {
+    const match = markdown.match(FRONTMATTER_RE);
+    return match
+        ? { frontmatter: match[0], body: markdown.slice(match[0].length) }
+        : { frontmatter: "", body: markdown };
 }
 function compactSection(value) {
     return value.replace(/\r\n?/g, "\n").trim().replace(/\n{3,}/g, "\n\n");

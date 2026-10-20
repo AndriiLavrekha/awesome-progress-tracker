@@ -1,5 +1,3 @@
-const SECTION_RE = /^##(?!#)\s+(?<title>.+?)\s*$/;
-const FENCE_RE = /^\s*(?<fence>`{3,}|~{3,})(?<rest>.*)$/;
 export const MAX_LAST_MILESTONE_LENGTH = 240;
 export const MAX_SECTION_CONTENT_LENGTH = 4000;
 export const FOLD_THRESHOLD = 2800;
@@ -58,48 +56,6 @@ export function validateSectionContent(content) {
     if (/^#{1,6}\s/m.test(content))
         return "section content cannot contain Markdown headings";
     return undefined;
-}
-function splitLinesWithEndings(markdown) {
-    const lines = markdown.match(/[^\r\n]*(?:\r\n|\n|\r|$)/g) ?? [];
-    return lines.filter((line, index) => line.length > 0 || index < lines.length - 1);
-}
-function sectionMatches(markdown) {
-    const matches = [];
-    let offset = 0;
-    let fenceMarker;
-    let fenceLength = 0;
-    for (const line of splitLinesWithEndings(markdown)) {
-        const contentLine = line.replace(/\r?\n$|\r$/, "");
-        const fenceMatch = contentLine.match(FENCE_RE);
-        if (fenceMatch?.groups) {
-            const fence = fenceMatch.groups.fence;
-            const marker = fence[0];
-            if (fenceMarker === undefined) {
-                fenceMarker = marker;
-                fenceLength = fence.length;
-            }
-            else if (fenceMarker === marker &&
-                fence.length >= fenceLength &&
-                fenceMatch.groups.rest.trim() === "") {
-                fenceMarker = undefined;
-                fenceLength = 0;
-            }
-            offset += line.length;
-            continue;
-        }
-        if (fenceMarker === undefined) {
-            const sectionMatch = contentLine.match(SECTION_RE);
-            if (sectionMatch?.groups) {
-                matches.push({
-                    title: sectionMatch.groups.title.trim(),
-                    start: offset,
-                    bodyStart: offset + line.length
-                });
-            }
-        }
-        offset += line.length;
-    }
-    return matches;
 }
 export function replaceSection(markdown, title, content) {
     const contentError = validateSectionContent(content);
@@ -190,6 +146,37 @@ export async function writeFileAtomic(filePath, content, expectedHash) {
         }
     });
 }
+// writeFileAtomic needs an existing file to compare against, so a missing
+// archive is created with exclusive create: a concurrent creator makes this
+// fail as a conflict instead of being overwritten.
+export async function updateArchiveFile(progressDir, transform) {
+    const archivePath = path.join(progressDir, "Archive.md");
+    let current;
+    try {
+        const bytes = await fs.readFile(archivePath);
+        try {
+            // Strict decode: a lossy one turns a Latin-1 byte into U+FFFD and the write below would persist it. ignoreBOM keeps a BOM, so the hash matches writeFileAtomic's utf-8 read.
+            current = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
+        }
+        catch {
+            throw new Error("Archive.md is not valid UTF-8; convert it to UTF-8 first.");
+        }
+    }
+    catch (error) {
+        if (error.code !== "ENOENT")
+            throw error;
+        try {
+            await fs.writeFile(archivePath, transform("# Archive\n"), { encoding: "utf-8", flag: "wx" });
+        }
+        catch (createError) {
+            if (createError.code === "EEXIST")
+                throw new ProgressConflictError(archivePath);
+            throw createError;
+        }
+        return;
+    }
+    await writeFileAtomic(archivePath, transform(current), sha256(current));
+}
 export function replaceFrontmatterValue(markdown, key, value) {
     const lines = splitLinesWithEndings(markdown);
     const hasFrontmatter = lines[0]?.trim() === "---";
@@ -220,3 +207,4 @@ export function replaceFrontmatterValue(markdown, key, value) {
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { sha256 } from "../hash.js";
+import { sectionMatches, splitLinesWithEndings } from "./markdown.js";

@@ -275,12 +275,13 @@ active:
 
 1. Commit `project-progress/` alone as a checkpoint, after the owner approves,
    because the repository has other uncommitted edits.
-2. Run `compact` and review the dry run. A read-only dry run of the planned code
-   on 2026-10-20 printed (KB = 1024 bytes): `Progress.md` 188.7 KB to 6.7 KB
-   (47 blocks and 25 Done lines moved, after dropping duplicate blocks);
-   `Session Log.md` 223.1 KB to 39.7 KB (189 blocks moved; 20 dated and 9
-   undated entries kept); `Tasks.md` 66.0 KB to 4.6 KB (44 blocks moved; 8 open
-   and 10 checked tasks kept). Record the actual numbers.
+2. Run `compact` and review the dry run. The released build's read-only dry run
+   on 2026-10-20 printed: `Progress.md` 188.9 KB to 5.6 KB (49 blocks and 25
+   Done lines moved); `Session Log.md` 224.8 KB to 38.1 KB (191 blocks moved;
+   9 undated entries kept); `Tasks.md` 66.8 KB to 3.6 KB (47 blocks moved);
+   garbled characters repaired in `Progress.md`, `Session Log.md` and
+   `Decisions.md`. The files keep changing while that project is active, so
+   record the actual numbers.
 3. Run `compact --write`.
 4. Hand pass, drafted from the 2026-10-20 Session Log entry and reviewed by the
    owner:

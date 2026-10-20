@@ -1,7 +1,7 @@
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { bodyHash, sha256 } from "../hash.js";
 import { extractSection, isKnownRuntimeValue, parseFrontmatter, renderLastRuntime } from "../mcp/markdown.js";
 import { replaceFrontmatterValue, writeFileAtomic } from "../mcp/writer.js";
@@ -10,7 +10,7 @@ import { readProjectTrackingState, setProjectTrackingState } from "../project-st
 import { defaultGitRunner as git, readCheckpoint, resolveDrift } from "./checkpoint.js";
 import { renderDrift, renderGates } from "./checkpoint-render.js";
 import { checkFreshness } from "./freshness.js";
-import { validateProgressFile } from "./validator.js";
+import { checkProgressHealth, summarizeProblems, validateProgressFile } from "./validator.js";
 async function initializationGuidance(cwd, hookEventName) {
     const progressPath = progressPathFor(cwd);
     if (await fileExists(progressPath))
@@ -218,6 +218,23 @@ function boundedContext(value, maxLength) {
         return value;
     return `${value.slice(0, Math.max(0, maxLength - 14))}… [truncated]`;
 }
+// Built from this file's location so it works for plugin installs, where the
+// awesome-progress-tracker binary is usually not on PATH.
+function compactCommand(cwd) {
+    const cli = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "cli.js");
+    // A trailing separator before the closing quote would escape it on Windows.
+    const trimmed = cwd.replace(/[\\/]+$/, "");
+    const dir = trimmed === "" || trimmed.endsWith(":") ? `${cwd.slice(0, trimmed.length + 1)}.` : trimmed;
+    return `node "${cli}" compact "${dir}"`;
+}
+async function bestEffortHealth(progressPath) {
+    try {
+        return await checkProgressHealth(path.dirname(progressPath));
+    }
+    catch {
+        return [];
+    }
+}
 export async function handleSessionStart(event) {
     const cwd = event.cwd ?? process.cwd();
     await recordSessionStart(event.session_id, cwd);
@@ -238,6 +255,11 @@ export async function handleSessionStart(event) {
     const runtime = renderLastRuntime(frontmatter);
     if (runtime)
         lines.push(`\n${runtime}`);
+    const health = await bestEffortHealth(progressPath);
+    if (health.length > 0) {
+        const command = health.some((finding) => finding.remedy === "compact") ? ` — run ${compactCommand(cwd)}` : "";
+        lines.push(`\nProgress health: ${boundedContext(health.map((finding) => finding.message).join("; "), 300)}${command}`);
+    }
     // Drift is pushed before Resume Snapshot/Next Action/Blockers so the agent
     // is warned that the recorded state may be stale before it absorbs that
     // state, not after.
@@ -381,9 +403,26 @@ export async function handleStop(event, options = {}) {
         }
     }
     try {
-        const secretErrors = (await validateProgressFile(progressPath)).filter((error) => error.includes("secret-like"));
+        const errors = await validateProgressFile(progressPath);
+        const secretErrors = errors.filter((error) => error.includes("secret-like"));
         if (secretErrors.length > 0) {
             warnings.push(`Progress file may contain secrets (${secretErrors.join("; ")}); remove them.`);
+        }
+        // Shown once per session: these persist until someone edits the files, and
+        // repeating them on every stop turns a report into noise.
+        if (!sessionState.healthShown) {
+            const health = await bestEffortHealth(progressPath);
+            const problems = [
+                ...health.map((finding) => finding.message),
+                ...errors.filter((error) => !error.includes("secret-like"))
+            ];
+            if (problems.length > 0) {
+                const command = health.some((finding) => finding.remedy === "compact") ? compactCommand(cwd) : undefined;
+                warnings.push(summarizeProblems(problems, command));
+                if (event.session_id) {
+                    await writeSessionState(event.session_id, { ...(await readSessionState(event.session_id)), healthShown: true });
+                }
+            }
         }
     }
     catch {
