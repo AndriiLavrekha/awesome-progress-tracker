@@ -1,5 +1,8 @@
 import { promises as fs } from "node:fs";
-import { listSections, parseFrontmatter } from "../mcp/markdown.js";
+import path from "node:path";
+import { KEPT_PROGRESS_SECTIONS, planCompaction, readProgressFiles } from "../compact.js";
+import { extractSection, listSections, parseFrontmatter } from "../mcp/markdown.js";
+import { MAX_SECTION_CONTENT_LENGTH } from "../mcp/writer.js";
 import { validateFrontmatter } from "./schema.js";
 
 export const REQUIRED_PROGRESS_SECTIONS = [
@@ -57,4 +60,53 @@ export function summarizeProblems(problems: string[], command: string | undefine
   const listed = `${problems.slice(0, limit).join("; ")}${more > 0 ? ` (+${more} more)` : ""}`;
   const hint = command ? ` Preview the cleanup with \`${command}\`, then add --write.` : "";
   return `Progress file problems: ${listed}.${hint}`;
+}
+
+export const PROGRESS_BYTES_BUDGET = 16 * 1024;
+export const SESSION_LOG_ENTRIES_BUDGET = 40;
+
+export interface HealthFinding {
+  message: string;
+  remedy: "compact" | "edit";
+}
+
+function kb(bytes: number): string {
+  return `${Math.round(bytes / 1024)} KB`;
+}
+
+// Runs the compaction rules in memory, so "compact" is suggested only when it
+// would actually change something; the rest needs a human or agent edit.
+export async function checkProgressHealth(progressDir: string): Promise<HealthFinding[]> {
+  const sources = await readProgressFiles(path.resolve(progressDir));
+  const texts = new Map([...sources].map(([name, source]) => [name, source.text]));
+  const plan = planCompaction(texts, "health");
+  const findings: HealthFinding[] = [];
+
+  const moves = [...plan.moved].map(([name, headings]) => `${name} ${headings.length} blocks`);
+  if (plan.folded.length > 0) moves.push(`${plan.folded.length} Done lines`);
+  if (moves.length > 0) findings.push({ message: `compact would move ${moves.join(", ")}`, remedy: "compact" });
+  for (const name of plan.repaired) findings.push({ message: `garbled characters in ${name}`, remedy: "compact" });
+
+  const progress = plan.outputs.get("Progress.md") ?? texts.get("Progress.md");
+  if (progress !== undefined) {
+    const bytes = Buffer.byteLength(progress, "utf-8");
+    if (bytes > PROGRESS_BYTES_BUDGET) {
+      findings.push({ message: `Progress.md is ${kb(bytes)} after compact (budget ${kb(PROGRESS_BYTES_BUDGET)}); shorten long sections`, remedy: "edit" });
+    }
+    for (const title of KEPT_PROGRESS_SECTIONS) {
+      const length = extractSection(progress, title).length;
+      if (length > MAX_SECTION_CONTENT_LENGTH) {
+        findings.push({ message: `Progress.md ${title} is ${length} characters (budget ${MAX_SECTION_CONTENT_LENGTH})`, remedy: "edit" });
+      }
+    }
+  }
+
+  const log = plan.outputs.get("Session Log.md") ?? texts.get("Session Log.md");
+  if (log !== undefined) {
+    const entries = listSections(log).length;
+    if (entries > SESSION_LOG_ENTRIES_BUDGET) {
+      findings.push({ message: `Session Log.md has ${entries} entries after compact (budget ${SESSION_LOG_ENTRIES_BUDGET}); date or remove undated entries`, remedy: "edit" });
+    }
+  }
+  return findings;
 }

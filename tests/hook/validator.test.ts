@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { summarizeProblems, validateProgressFile } from "../../src/hook/validator.js";
+import { checkProgressHealth, summarizeProblems, validateProgressFile } from "../../src/hook/validator.js";
 
 describe("validateProgressFile", () => {
   it("returns no errors for the valid fixture", async () => {
@@ -39,5 +39,33 @@ describe("summarizeProblems", () => {
 
   it("omits the command when none applies", () => {
     expect(summarizeProblems(["a"], undefined)).toBe("Progress file problems: a.");
+  });
+});
+
+describe("checkProgressHealth", () => {
+  async function folder(files: Record<string, string>): Promise<string> {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "pp-health-"));
+    for (const [name, content] of Object.entries(files)) await fs.writeFile(path.join(dir, name), content, "utf-8");
+    return dir;
+  }
+
+  it("is silent for the valid fixture", async () => {
+    expect(await checkProgressHealth("tests/fixtures/valid-project/project-progress")).toEqual([]);
+  });
+
+  it("reports what compact would move and what only an edit can fix", async () => {
+    // Checkouts with core.autocrlf=true give this fixture CRLF endings.
+    const valid = (await fs.readFile("tests/fixtures/valid-project/project-progress/Progress.md", "utf-8")).replace(/\r\n/g, "\n");
+    const longNext = `${"y".repeat(4100)}`;
+    const dir = await folder({
+      "Progress.md": `${valid.replace(/## Next Action\n\n[^\n]*/, `## Next Action\n\n${longNext}`)}\n## Historical Notes\n\n${"x".repeat(17 * 1024)}\n`,
+      "Decisions.md": "# Decisions\n\n\u00e2\u20ac\u201d\n"
+    });
+    const findings = await checkProgressHealth(dir);
+    expect(findings).toEqual([
+      { message: "compact would move Progress.md 1 blocks", remedy: "compact" },
+      { message: "garbled characters in Decisions.md", remedy: "compact" },
+      { message: "Progress.md Next Action is 4100 characters (budget 4000)", remedy: "edit" }
+    ]);
   });
 });

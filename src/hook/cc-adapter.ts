@@ -1,7 +1,7 @@
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { bodyHash, sha256 } from "../hash.js";
 import { extractSection, isKnownRuntimeValue, parseFrontmatter, renderLastRuntime } from "../mcp/markdown.js";
 import { replaceFrontmatterValue, writeFileAtomic } from "../mcp/writer.js";
@@ -10,7 +10,8 @@ import { readProjectTrackingState, setProjectTrackingState } from "../project-st
 import { defaultGitRunner as git, readCheckpoint, resolveDrift } from "./checkpoint.js";
 import { renderDrift, renderGates } from "./checkpoint-render.js";
 import { checkFreshness } from "./freshness.js";
-import { summarizeProblems, validateProgressFile } from "./validator.js";
+import { checkProgressHealth, summarizeProblems, validateProgressFile } from "./validator.js";
+import type { HealthFinding } from "./validator.js";
 
 // Adapter that bridges Claude Code hook events (JSON on stdin) to the Awesome
 // Progress Tracker checks. Invoked as: node cc-adapter.js <session-start|user-prompt-submit|pre-commit|stop>
@@ -267,6 +268,21 @@ function boundedContext(value: string, maxLength: number): string {
   return `${value.slice(0, Math.max(0, maxLength - 14))}… [truncated]`;
 }
 
+// Built from this file's location so it works for plugin installs, where the
+// awesome-progress-tracker binary is usually not on PATH.
+function compactCommand(cwd: string): string {
+  const cli = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "cli.js");
+  return `node "${cli}" compact "${cwd}"`;
+}
+
+async function bestEffortHealth(progressPath: string): Promise<HealthFinding[]> {
+  try {
+    return await checkProgressHealth(path.dirname(progressPath));
+  } catch {
+    return [];
+  }
+}
+
 export async function handleSessionStart(event: HookEvent): Promise<HookResult> {
   const cwd = event.cwd ?? process.cwd();
   await recordSessionStart(event.session_id, cwd);
@@ -291,6 +307,12 @@ export async function handleSessionStart(event: HookEvent): Promise<HookResult> 
 
   const runtime = renderLastRuntime(frontmatter);
   if (runtime) lines.push(`\n${runtime}`);
+
+  const health = await bestEffortHealth(progressPath);
+  if (health.length > 0) {
+    const command = health.some((finding) => finding.remedy === "compact") ? ` — run ${compactCommand(cwd)}` : "";
+    lines.push(`\nProgress health: ${boundedContext(health.map((finding) => finding.message).join("; "), 300)}${command}`);
+  }
 
   // Drift is pushed before Resume Snapshot/Next Action/Blockers so the agent
   // is warned that the recorded state may be stale before it absorbs that
@@ -470,9 +492,14 @@ export async function handleStop(event: HookEvent, options: HandleStopOptions = 
     // Shown once per session: these persist until someone edits the files, and
     // repeating them on every stop turns a report into noise.
     if (!sessionState.healthShown) {
-      const problems = errors.filter((error) => !error.includes("secret-like"));
+      const health = await bestEffortHealth(progressPath);
+      const problems = [
+        ...errors.filter((error) => !error.includes("secret-like")),
+        ...health.map((finding) => finding.message)
+      ];
       if (problems.length > 0) {
-        warnings.push(summarizeProblems(problems, undefined));
+        const command = health.some((finding) => finding.remedy === "compact") ? compactCommand(cwd) : undefined;
+        warnings.push(summarizeProblems(problems, command));
         if (event.session_id) {
           await writeSessionState(event.session_id, { ...(await readSessionState(event.session_id)), healthShown: true });
         }

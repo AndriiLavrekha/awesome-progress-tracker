@@ -140,6 +140,39 @@ describe("cc-adapter session-start", () => {
       expect(context.length).toBeLessThanOrEqual(1600);
     });
   });
+
+  it("adds a progress health line when compact would move history", async () => {
+    await withTrackerHome(async () => {
+      const dir = await makeRepo();
+      await writeProgress(dir, `${progressDoc({})}\n## Historical Notes\n\nold\n`);
+      const result = await handleSessionStart({ cwd: dir, session_id: `health-${Date.now()}` });
+      const context = JSON.parse(result.stdout!).hookSpecificOutput.additionalContext as string;
+      expect(context).toContain("Progress health: compact would move Progress.md 1 blocks — run node ");
+      expect(context).toContain(" compact ");
+    });
+  });
+
+  it("omits the health line for a healthy progress folder", async () => {
+    await withTrackerHome(async () => {
+      const dir = await makeRepo();
+      await writeProgress(dir, progressDoc({}));
+      const result = await handleSessionStart({ cwd: dir, session_id: `healthy-${Date.now()}` });
+      const context = JSON.parse(result.stdout!).hookSpecificOutput.additionalContext as string;
+      expect(context).not.toContain("Progress health");
+    });
+  });
+
+  it("keeps the resume context when the health check fails", async () => {
+    await withTrackerHome(async () => {
+      const dir = await makeRepo();
+      await writeProgress(dir, progressDoc({}));
+      await fs.mkdir(path.join(dir, "project-progress", "Tasks.md"));
+      const result = await handleSessionStart({ cwd: dir, session_id: `health-fail-${Date.now()}` });
+      const context = JSON.parse(result.stdout!).hookSpecificOutput.additionalContext as string;
+      expect(context).toContain("Resume Snapshot:");
+      expect(context).not.toContain("Progress health");
+    });
+  });
 });
 
 describe("cc-adapter user-prompt-submit", () => {
@@ -749,6 +782,27 @@ describe("cc-adapter body-hash freshness", () => {
       const second = await handleStop({ cwd: dir, session_id: sessionId });
       expect(second.stdout).toContain("secrets");
       expect(second.stdout).not.toContain("Progress file problems");
+    });
+  });
+
+  it("names the compact command once when compact would move history", async () => {
+    await withTrackerHome(async () => {
+      const dir = await makeRepo();
+      const file = await writeProgress(dir, `${progressDoc({})}\n## Historical Notes\n\nold\n`);
+      await commitAll(dir, "init");
+      await fs.writeFile(path.join(dir, "src.txt"), "work", "utf-8");
+
+      const sessionId = `s-compact-${Date.now()}`;
+      await handleSessionStart({ cwd: dir, session_id: sessionId });
+      const current = await fs.readFile(file, "utf-8");
+      await fs.writeFile(file, current.replace("Wire the widget.", "Ship the widget."), "utf-8");
+
+      const first = await handleStop({ cwd: dir, session_id: sessionId });
+      expect(first.stdout).toContain("compact would move Progress.md 1 blocks");
+      expect(first.stdout).toContain("Preview the cleanup with `node ");
+
+      const second = await handleStop({ cwd: dir, session_id: sessionId });
+      expect(second.stdout ?? "").not.toContain("compact would move");
     });
   });
 
