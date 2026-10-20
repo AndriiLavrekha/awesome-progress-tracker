@@ -52,6 +52,20 @@ describe("compactProgress", () => {
     ]);
   });
 
+  it("notes a moved near-miss title when its section is missing", () => {
+    const base = progress().replace("## Remaining Work\n\nRemaining Work body.\n\n", "");
+    const result = compactProgress(`${base}\n## Remaining Work and Blockers\n\nstill current?\n`);
+    expect(result.kept).toBe(base);
+    expect(result.moved.map((block) => block.trim())).toEqual(["## Remaining Work and Blockers\n\nstill current?"]);
+    expect(result.notes).toEqual([
+      'Progress.md: moved "Remaining Work and Blockers" while "Remaining Work" is missing; copy anything still current into a "## Remaining Work" section.'
+    ]);
+  });
+
+  it("adds no near-miss note when the kept section is present", () => {
+    expect(compactProgress(progress("\n## Remaining Work and Blockers\n\nold\n")).notes).toEqual([]);
+  });
+
   it("ignores headings inside fenced code", () => {
     const extra = "\n```md\n## Not A Section\n# Not A Title\n```\n";
     const result = compactProgress(progress(extra));
@@ -123,6 +137,11 @@ describe("compactSessionLog", () => {
       "## 2026-10-01 09:00 early-second",
       "## 2026-10-01 18:00 late"
     ]);
+  });
+
+  it("sorts ISO timestamps by their time of day", () => {
+    const input = `# Session Log\n\n${[entry("2026-10-05T17:48:47Z b"), entry("2026-10-05T09:00:00Z a")].join("\n")}`;
+    expect(headings(compactSessionLog(input).kept)).toEqual(["## 2026-10-05T09:00:00Z a", "## 2026-10-05T17:48:47Z b"]);
   });
 
   it("keeps undated entries ahead of dated ones and moves a second H1", () => {
@@ -214,6 +233,8 @@ describe("planCompaction", () => {
     expect(plan.folded.length).toBeGreaterThan(0);
     expect(plan.repaired).toEqual(["Decisions.md"]);
     expect(plan.run).toBe("## Compacted 2026-10-20\n\n### From Progress.md\n\n#### Historical\n\nold\n");
+    const foldedBytes = plan.folded.reduce((sum, line) => sum + Buffer.byteLength(line) + 1, 0);
+    expect(plan.movedBytes).toBe(Buffer.byteLength("## Historical\n\nold\n") + foldedBytes);
   });
 });
 

@@ -174,6 +174,19 @@ describe("cc-adapter session-start", () => {
     });
   });
 
+  it("reports a non-UTF-8 progress file instead of hiding the health check", async () => {
+    await withTrackerHome(async () => {
+      const dir = await makeRepo();
+      await writeProgress(dir, progressDoc({}));
+      await fs.writeFile(path.join(dir, "project-progress", "Session Log.md"), Buffer.from([0x23, 0x20, 0x4c, 0xe9, 0x0a]));
+      const result = await handleSessionStart({ cwd: dir, session_id: `health-utf8-${Date.now()}` });
+      const context = JSON.parse(result.stdout!).hookSpecificOutput.additionalContext as string;
+      expect(context).toContain("Progress health:");
+      expect(context).toContain("not valid UTF-8");
+      expect(context).toContain("Resume Snapshot:");
+    });
+  });
+
   it("quotes the compact target without a trailing separator", async () => {
     await withTrackerHome(async () => {
       const dir = await makeRepo();

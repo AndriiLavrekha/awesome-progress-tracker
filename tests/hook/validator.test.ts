@@ -69,6 +69,25 @@ describe("checkProgressHealth", () => {
     ]);
   });
 
+  describe("session log growth", () => {
+    const logOf = (count: number, bodyLength: number): string => {
+      const entries = Array.from({ length: count }, (_, i) => `## 2026-09-${String(i + 1).padStart(2, "0")}\n\n${"x".repeat(bodyLength)}\n`);
+      return `# Session Log\n\n${entries.join("\n")}`;
+    };
+    const validProgress = async () =>
+      (await fs.readFile("tests/fixtures/valid-project/project-progress/Progress.md", "utf-8")).replace(/\r\n/g, "\n");
+
+    it("stays quiet when compact would move only a little routine growth", async () => {
+      const dir = await folder({ "Progress.md": await validProgress(), "Session Log.md": logOf(21, 20) });
+      expect(await checkProgressHealth(dir)).toEqual([]);
+    });
+
+    it("suggests compact once the movable history passes the byte threshold", async () => {
+      const dir = await folder({ "Progress.md": await validProgress(), "Session Log.md": logOf(22, 5000) });
+      expect(await checkProgressHealth(dir)).toEqual([{ message: "compact would move Session Log.md 2 blocks", remedy: "compact" }]);
+    });
+  });
+
   it("names every garbled file in one finding", async () => {
     const valid = (await fs.readFile("tests/fixtures/valid-project/project-progress/Progress.md", "utf-8")).replace(/\r\n/g, "\n");
     const garbled = "# Notes\n\n\u00e2\u20ac\u201d\n";

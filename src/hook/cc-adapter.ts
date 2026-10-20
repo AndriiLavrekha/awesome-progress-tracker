@@ -281,7 +281,9 @@ function compactCommand(cwd: string): string {
 async function bestEffortHealth(progressPath: string): Promise<HealthFinding[]> {
   try {
     return await checkProgressHealth(path.dirname(progressPath));
-  } catch {
+  } catch (error) {
+    // A non-UTF-8 file is something the user must fix, so don't hide it.
+    if (error instanceof Error && error.message.includes("is not valid UTF-8")) return [{ message: error.message, remedy: "edit" }];
     return [];
   }
 }
