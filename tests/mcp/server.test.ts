@@ -517,5 +517,6 @@ describe("archiveFoldedItems", () => {
     const result = await archiveFoldedItems(path.join(dir, "Progress.md"), ["- [x] old"]);
     expect(result.unarchivedItems).toEqual(["- [x] old"]);
     expect(result.archiveError).toBeTruthy();
+    expect(result.archiveHint).toContain("Progress.md is saved");
   });
 });

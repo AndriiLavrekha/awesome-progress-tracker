@@ -315,13 +315,17 @@ export function conflictPayload(
 export async function archiveFoldedItems(
   progressPath: string,
   items: string[]
-): Promise<{ archiveError?: string; unarchivedItems?: string[] }> {
+): Promise<{ archiveError?: string; archiveHint?: string; unarchivedItems?: string[] }> {
   if (items.length === 0) return {};
   try {
     await updateArchiveFile(path.dirname(progressPath), (current) => appendToArchive(current, items));
     return {};
   } catch (error) {
-    return { archiveError: error instanceof Error ? error.message : String(error), unarchivedItems: items };
+    return {
+      archiveError: error instanceof Error ? error.message : String(error),
+      archiveHint: "Progress.md is saved. Archive.md was not updated; append unarchivedItems to Archive.md or add them back to Done.",
+      unarchivedItems: items
+    };
   }
 }
 
@@ -460,10 +464,11 @@ export function createServer(): McpServer {
         return await conflictResult(error, match.progressPath, { section });
       }
 
+      // Right after the guarded write lands (ADR 0020), before anything else that can throw.
+      const archive = await archiveFoldedItems(match.progressPath, archived);
+
       await upsertIndexedProject(parseProjectSummary(updated, match.progressPath));
 
-      // Archiving only after the guarded write lands (ADR 0020).
-      const archive = await archiveFoldedItems(match.progressPath, archived);
       return textResult(JSON.stringify({
         updated: true,
         operation: result.operation,
