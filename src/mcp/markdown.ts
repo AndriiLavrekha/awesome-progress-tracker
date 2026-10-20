@@ -44,15 +44,24 @@ export function parseFrontmatter(markdown: string): Record<string, FrontmatterSc
   return frontmatter;
 }
 
-function sectionMatches(markdown: string): Array<{ title: string; start: number; bodyStart: number }> {
-  const matches: Array<{ title: string; start: number; bodyStart: number }> = [];
+export interface ScannedLine {
+  text: string;
+  offset: number;
+  length: number;
+  inFence: boolean;
+}
+
+// One pass with the fence rules every heading and task parser shares: a fence
+// line, and every line between fences, is never a heading or a task.
+export function scanLines(markdown: string): ScannedLine[] {
+  const lines: ScannedLine[] = [];
   let offset = 0;
   let fenceMarker: string | undefined;
   let fenceLength = 0;
 
   for (const line of splitLinesWithEndings(markdown)) {
-    const contentLine = line.replace(/\r?\n$|\r$/, "");
-    const fenceMatch = contentLine.match(FENCE_RE);
+    const text = line.replace(/\r?\n$|\r$/, "");
+    const fenceMatch = text.match(FENCE_RE);
     if (fenceMatch?.groups) {
       const fence = fenceMatch.groups.fence;
       const marker = fence[0];
@@ -67,31 +76,48 @@ function sectionMatches(markdown: string): Array<{ title: string; start: number;
         fenceMarker = undefined;
         fenceLength = 0;
       }
-
-      offset += line.length;
-      continue;
     }
 
-    if (fenceMarker === undefined) {
-      const sectionMatch = contentLine.match(SECTION_RE);
-      if (sectionMatch?.groups) {
-        matches.push({
-          title: sectionMatch.groups.title.trim(),
-          start: offset,
-          bodyStart: offset + line.length
-        });
-      }
-    }
-
+    lines.push({
+      text,
+      offset,
+      length: line.length,
+      inFence: fenceMatch?.groups !== undefined || fenceMarker !== undefined
+    });
     offset += line.length;
   }
 
+  return lines;
+}
+
+export function sectionMatches(markdown: string): Array<{ title: string; start: number; bodyStart: number }> {
+  const matches: Array<{ title: string; start: number; bodyStart: number }> = [];
+  for (const line of scanLines(markdown)) {
+    if (line.inFence) continue;
+    const sectionMatch = line.text.match(SECTION_RE);
+    if (sectionMatch?.groups) {
+      matches.push({
+        title: sectionMatch.groups.title.trim(),
+        start: line.offset,
+        bodyStart: line.offset + line.length
+      });
+    }
+  }
   return matches;
 }
 
-function splitLinesWithEndings(markdown: string): string[] {
+export function splitLinesWithEndings(markdown: string): string[] {
   const lines = markdown.match(/[^\r\n]*(?:\r\n|\n|\r|$)/g) ?? [];
   return lines.filter((line, index) => line.length > 0 || index < lines.length - 1);
+}
+
+const FRONTMATTER_RE = /^---\r?\n[\s\S]*?\r?\n---[ \t]*(?:\r?\n|$)/;
+
+export function splitFrontmatter(markdown: string): { frontmatter: string; body: string } {
+  const match = markdown.match(FRONTMATTER_RE);
+  return match
+    ? { frontmatter: match[0], body: markdown.slice(match[0].length) }
+    : { frontmatter: "", body: markdown };
 }
 
 function compactSection(value: string): string {

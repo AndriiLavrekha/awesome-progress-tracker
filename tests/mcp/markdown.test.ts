@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseFrontmatter, parseProjectSummary, renderLastRuntime } from "../../src/mcp/markdown.js";
+import { parseFrontmatter, parseProjectSummary, renderLastRuntime, scanLines, splitFrontmatter } from "../../src/mcp/markdown.js";
 
 describe("parseProjectSummary", () => {
   it("returns a compact project summary", () => {
@@ -211,5 +211,30 @@ None.
       "Last runtime: provider grok · agent codex · model grok-4.7 · updated 2026-06-26"
     );
     expect(parseProjectSummary("---\nproject: Quiet\nstatus: active\n---\n", "C:/repo/project-progress/Progress.md").lastRuntime).toBe("");
+  });
+});
+
+describe("scanLines", () => {
+  it("marks fence lines and fenced content, and keeps offsets", () => {
+    const markdown = "a\n```\n## not\n```\n## yes\n";
+    const lines = scanLines(markdown);
+    expect(lines.map((line) => [line.text, line.inFence])).toEqual([
+      ["a", false],
+      ["```", true],
+      ["## not", true],
+      ["```", true],
+      ["## yes", false]
+    ]);
+    expect(markdown.slice(lines[4].offset, lines[4].offset + lines[4].length)).toBe("## yes\n");
+  });
+});
+
+describe("splitFrontmatter", () => {
+  it("splits a leading frontmatter block from the body", () => {
+    expect(splitFrontmatter("---\na: 1\n---\n\n# T\n")).toEqual({ frontmatter: "---\na: 1\n---\n", body: "\n# T\n" });
+  });
+
+  it("returns the whole text as body when there is no frontmatter", () => {
+    expect(splitFrontmatter("# T\n")).toEqual({ frontmatter: "", body: "# T\n" });
   });
 });

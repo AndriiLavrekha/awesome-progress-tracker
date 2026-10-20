@@ -1,5 +1,3 @@
-const SECTION_RE = /^##(?!#)\s+(?<title>.+?)\s*$/;
-const FENCE_RE = /^\s*(?<fence>`{3,}|~{3,})(?<rest>.*)$/;
 export const MAX_LAST_MILESTONE_LENGTH = 240;
 export const MAX_SECTION_CONTENT_LENGTH = 4000;
 export const FOLD_THRESHOLD = 2800;
@@ -59,56 +57,6 @@ export function validateSectionContent(content: string): string | undefined {
   if (/^---\s*$/m.test(content)) return "section content cannot contain frontmatter delimiters";
   if (/^#{1,6}\s/m.test(content)) return "section content cannot contain Markdown headings";
   return undefined;
-}
-
-function splitLinesWithEndings(markdown: string): string[] {
-  const lines = markdown.match(/[^\r\n]*(?:\r\n|\n|\r|$)/g) ?? [];
-  return lines.filter((line, index) => line.length > 0 || index < lines.length - 1);
-}
-
-function sectionMatches(markdown: string): Array<{ title: string; start: number; bodyStart: number }> {
-  const matches: Array<{ title: string; start: number; bodyStart: number }> = [];
-  let offset = 0;
-  let fenceMarker: string | undefined;
-  let fenceLength = 0;
-
-  for (const line of splitLinesWithEndings(markdown)) {
-    const contentLine = line.replace(/\r?\n$|\r$/, "");
-    const fenceMatch = contentLine.match(FENCE_RE);
-    if (fenceMatch?.groups) {
-      const fence = fenceMatch.groups.fence;
-      const marker = fence[0];
-      if (fenceMarker === undefined) {
-        fenceMarker = marker;
-        fenceLength = fence.length;
-      } else if (
-        fenceMarker === marker &&
-        fence.length >= fenceLength &&
-        fenceMatch.groups.rest.trim() === ""
-      ) {
-        fenceMarker = undefined;
-        fenceLength = 0;
-      }
-
-      offset += line.length;
-      continue;
-    }
-
-    if (fenceMarker === undefined) {
-      const sectionMatch = contentLine.match(SECTION_RE);
-      if (sectionMatch?.groups) {
-        matches.push({
-          title: sectionMatch.groups.title.trim(),
-          start: offset,
-          bodyStart: offset + line.length
-        });
-      }
-    }
-
-    offset += line.length;
-  }
-
-  return matches;
 }
 
 export function replaceSection(markdown: string, title: string, content: string): string {
@@ -257,3 +205,4 @@ export function replaceFrontmatterValue(markdown: string, key: string, value: st
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { sha256 } from "../hash.js";
+import { sectionMatches, splitLinesWithEndings } from "./markdown.js";
