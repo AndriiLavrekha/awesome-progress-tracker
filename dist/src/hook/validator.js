@@ -55,6 +55,7 @@ export function summarizeProblems(problems, command, limit = 3) {
 }
 export const PROGRESS_BYTES_BUDGET = 16 * 1024;
 export const SESSION_LOG_ENTRIES_BUDGET = 40;
+export const COMPACT_SUGGEST_BYTES = 8 * 1024;
 function kb(bytes) {
     return `${Math.round(bytes / 1024)} KB`;
 }
@@ -68,7 +69,10 @@ export async function checkProgressHealth(progressDir) {
     const moves = [...plan.moved].map(([name, headings]) => `${name} ${headings.length} blocks`);
     if (plan.folded.length > 0)
         moves.push(`${plan.folded.length} Done lines`);
-    if (moves.length > 0)
+    // Unknown Progress.md sections always count; routine growth past the keep
+    // limits only does once enough accumulates, so a fresh compact stays quiet.
+    const worthSuggesting = plan.moved.has("Progress.md") || plan.movedBytes >= COMPACT_SUGGEST_BYTES;
+    if (moves.length > 0 && worthSuggesting)
         findings.push({ message: `compact would move ${moves.join(", ")}`, remedy: "compact" });
     if (plan.repaired.length > 0)
         findings.push({ message: `garbled characters in ${plan.repaired.join(", ")}`, remedy: "compact" });

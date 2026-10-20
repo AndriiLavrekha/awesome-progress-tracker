@@ -47,6 +47,7 @@ export function compactProgress(text) {
     const { frontmatter, body } = splitFrontmatter(repairEncoding(text));
     const kept = [];
     const moved = [];
+    const movedTitles = [];
     const seen = new Set();
     let titleSeen = false;
     for (const block of splitBlocks(body)) {
@@ -61,6 +62,17 @@ export function compactProgress(text) {
         }
         else {
             moved.push(block.text);
+            if (block.level === 2)
+                movedTitles.push(block.title);
+        }
+    }
+    // A renamed section ("Remaining Work and Blockers") is moved as unknown; say
+    // so when the real section is missing, so its content is not silently lost.
+    const notes = [];
+    for (const title of movedTitles) {
+        const section = [...KEPT_PROGRESS_SECTIONS].find((name) => !seen.has(name) && title.toLowerCase().startsWith(name.toLowerCase()));
+        if (section) {
+            notes.push(`Progress.md: moved "${title}" while "${section}" is missing; copy anything still current into a "## ${section}" section.`);
         }
     }
     let folded = [];
@@ -73,7 +85,7 @@ export function compactProgress(text) {
             done.text = `## Done\n\n${fold.kept}\n`;
         }
     }
-    return { kept: joinBlocks(frontmatter, kept), moved: dedupe(moved), folded, notes: [] };
+    return { kept: joinBlocks(frontmatter, kept), moved: dedupe(moved), folded, notes };
 }
 export function demoteHeadings(text, levels) {
     return scanLines(text)
@@ -90,14 +102,14 @@ export function renderArchiveRun(date, sources) {
     return parts.length === 0 ? "" : `## Compacted ${date}\n\n${parts.join("\n")}`;
 }
 const DATE_RE = /\d{4}-\d{2}-\d{2}/;
-const TIME_RE = /\b\d{2}:\d{2}\b/;
+const TIME_RE = /(?:\b|T)(\d{2}:\d{2})\b/;
 // "YYYY-MM-DD HH:MM"; an entry without a time sorts as 00:00 on its day.
 function sortKey(title) {
     const date = title.match(DATE_RE);
     if (!date)
         return undefined;
     const time = title.slice((date.index ?? 0) + date[0].length).match(TIME_RE);
-    return `${date[0]} ${time ? time[0] : "00:00"}`;
+    return `${date[0]} ${time ? time[1] : "00:00"}`;
 }
 export function compactSessionLog(text) {
     const { frontmatter, body } = splitFrontmatter(repairEncoding(text));
@@ -203,7 +215,7 @@ function compactFile(name, text) {
 }
 // files: name -> LF text. Pure; the CLI and the health check both use it.
 export function planCompaction(files, date) {
-    const plan = { outputs: new Map(), moved: new Map(), run: "", folded: [], repaired: [], notes: [] };
+    const plan = { outputs: new Map(), moved: new Map(), movedBytes: 0, run: "", folded: [], repaired: [], notes: [] };
     const sources = [];
     for (const [name, text] of files) {
         const result = compactFile(name, text);
@@ -212,9 +224,14 @@ export function planCompaction(files, date) {
         if (result.moved.length > 0) {
             plan.moved.set(name, result.moved.map((block) => block.split("\n")[0]));
             sources.push({ file: name, blocks: result.moved });
+            for (const block of result.moved)
+                plan.movedBytes += Buffer.byteLength(block);
         }
-        if (result.folded.length > 0)
+        if (result.folded.length > 0) {
             plan.folded = result.folded;
+            for (const line of result.folded)
+                plan.movedBytes += Buffer.byteLength(line) + 1;
+        }
         if (hasMojibake(text))
             plan.repaired.push(name);
         plan.notes.push(...result.notes);
