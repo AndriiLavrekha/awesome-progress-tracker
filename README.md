@@ -249,7 +249,7 @@ awesome-progress-tracker compact            # preview what moves
 awesome-progress-tracker compact --write    # apply
 ```
 
-The directory argument is optional and defaults to the current directory. For plugin installs without the binary on PATH, use the exact `node "…/cli.js" compact "…"` command the hook message prints, or `npx awesome-progress-tracker compact`.
+The directory argument is optional and defaults to the current directory. For plugin installs without the binary on PATH, use the exact `node "…/cli.js" compact "…"` command the hook message prints, or `npx github:AndriiLavrekha/awesome-progress-tracker compact`.
 
 It moves:
 
