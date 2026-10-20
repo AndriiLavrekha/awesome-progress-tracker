@@ -10,7 +10,7 @@ import { readProjectTrackingState, setProjectTrackingState } from "../project-st
 import { defaultGitRunner as git, readCheckpoint, resolveDrift } from "./checkpoint.js";
 import { renderDrift, renderGates } from "./checkpoint-render.js";
 import { checkFreshness } from "./freshness.js";
-import { validateProgressFile } from "./validator.js";
+import { summarizeProblems, validateProgressFile } from "./validator.js";
 
 // Adapter that bridges Claude Code hook events (JSON on stdin) to the Awesome
 // Progress Tracker checks. Invoked as: node cc-adapter.js <session-start|user-prompt-submit|pre-commit|stop>
@@ -86,6 +86,7 @@ interface SessionState {
   cwd?: string;
   editReminderShown?: boolean;
   stopBlocked?: boolean;
+  healthShown?: boolean;
   bodyHash?: string;
 }
 
@@ -461,11 +462,21 @@ export async function handleStop(event: HookEvent, options: HandleStopOptions = 
   }
 
   try {
-    const secretErrors = (await validateProgressFile(progressPath)).filter((error) =>
-      error.includes("secret-like")
-    );
+    const errors = await validateProgressFile(progressPath);
+    const secretErrors = errors.filter((error) => error.includes("secret-like"));
     if (secretErrors.length > 0) {
       warnings.push(`Progress file may contain secrets (${secretErrors.join("; ")}); remove them.`);
+    }
+    // Shown once per session: these persist until someone edits the files, and
+    // repeating them on every stop turns a report into noise.
+    if (!sessionState.healthShown) {
+      const problems = errors.filter((error) => !error.includes("secret-like"));
+      if (problems.length > 0) {
+        warnings.push(summarizeProblems(problems, undefined));
+        if (event.session_id) {
+          await writeSessionState(event.session_id, { ...(await readSessionState(event.session_id)), healthShown: true });
+        }
+      }
     }
   } catch {
     // validation is best effort

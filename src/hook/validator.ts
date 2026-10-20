@@ -51,3 +51,10 @@ export async function validateProgressFile(progressPath: string): Promise<string
 
   return errors;
 }
+
+export function summarizeProblems(problems: string[], command: string | undefined, limit = 3): string {
+  const more = problems.length - limit;
+  const listed = `${problems.slice(0, limit).join("; ")}${more > 0 ? ` (+${more} more)` : ""}`;
+  const hint = command ? ` Preview the cleanup with \`${command}\`, then add --write.` : "";
+  return `Progress file problems: ${listed}.${hint}`;
+}

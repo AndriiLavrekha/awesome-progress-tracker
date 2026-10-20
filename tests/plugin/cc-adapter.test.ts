@@ -4,6 +4,7 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { handlePreCommit, handlePreEdit, handleSessionStart, handleStop, handleUserPromptSubmit, providerFromArgv, runHook } from "../../src/hook/cc-adapter.js";
+import { validateProgressFile } from "../../src/hook/validator.js";
 import { parseFrontmatter } from "../../src/mcp/markdown.js";
 import { readProjectTrackingState, setProjectTrackingState } from "../../src/project-state.js";
 
@@ -30,15 +31,27 @@ async function makeRepo(): Promise<string> {
 function progressDoc(fields: Record<string, string>, blockers = "None."): string {
   const fm = Object.entries({
     project: "Demo",
-    status: "active",
     progress_schema_version: "1",
+    status: "active",
+    path: "demo",
+    // "unknown" keeps renderLastRuntime output unchanged for the runtime-memo tests.
+    agent_last_used: "unknown",
+    updated: "2026-10-20",
+    last_milestone: "started",
+    deployed: "false",
+    deployment_url: "",
     sensitivity: "normal",
     commit_progress: "true",
     ...fields
   })
     .map(([k, v]) => `${k}: ${v}`)
     .join("\n");
-  return `---\n${fm}\n---\n\n## Resume Snapshot\n\nWorking on the widget.\n\n## Next Action\n\nWire the widget.\n\n## Blockers\n\n${blockers}\n`;
+  return (
+    `---\n${fm}\n---\n\n## Resume Snapshot\n\nWorking on the widget.\n\n## Current State\n\nIn progress.\n\n` +
+    `## Last Session\n\nStarted.\n\n## Next Action\n\nWire the widget.\n\n## Remaining Work\n\n- [ ] Finish the widget.\n\n` +
+    `## Done\n\n- [x] Planned.\n\n## Blockers\n\n${blockers}\n\n## Deployment\n\nNot deployed.\n\n` +
+    `## Completion Criteria\n\n- [ ] Widget wired.\n\n## Resume Instructions\n\nRead Next Action.\n`
+  );
 }
 
 async function writeProgress(dir: string, content: string): Promise<string> {
@@ -50,6 +63,12 @@ async function writeProgress(dir: string, content: string): Promise<string> {
 }
 
 describe("cc-adapter session-start", () => {
+  it("uses a progress fixture the validator accepts", async () => {
+    const dir = await makeRepo();
+    const file = await writeProgress(dir, progressDoc({}));
+    expect(await validateProgressFile(file)).toEqual([]);
+  });
+
   it("emits initialization guidance when there is no progress file and state is unknown", async () => {
     await withTrackerHome(async () => {
       const dir = await fs.mkdtemp(path.join(os.tmpdir(), "pp-cc-empty-"));
@@ -702,6 +721,34 @@ describe("cc-adapter body-hash freshness", () => {
       const result = await handleStop({ cwd: dir, session_id: sessionId });
 
       expect(result.code).toBe(0);
+    });
+  });
+
+  it("reports validator problems once per session and secrets on every stop", async () => {
+    await withTrackerHome(async () => {
+      const dir = await makeRepo();
+      const file = await writeProgress(dir, progressDoc({ status: "in_progress" }));
+      await commitAll(dir, "init");
+      await fs.writeFile(path.join(dir, "src.txt"), "work", "utf-8");
+
+      const sessionId = `s-problems-${Date.now()}`;
+      await handleSessionStart({ cwd: dir, session_id: sessionId });
+      const current = await fs.readFile(file, "utf-8");
+      await fs.writeFile(
+        file,
+        current.replace("Wire the widget.", "Ship the widget. token sk-abcdefghijklmnop0123456789"),
+        "utf-8"
+      );
+
+      const first = await handleStop({ cwd: dir, session_id: sessionId });
+      expect(first.code).toBe(0);
+      expect(first.stdout).toContain("Progress file problems");
+      expect(first.stdout).toContain("status");
+      expect(first.stdout).toContain("secrets");
+
+      const second = await handleStop({ cwd: dir, session_id: sessionId });
+      expect(second.stdout).toContain("secrets");
+      expect(second.stdout).not.toContain("Progress file problems");
     });
   });
 

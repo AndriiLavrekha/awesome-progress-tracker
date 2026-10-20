@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { validateProgressFile } from "../../src/hook/validator.js";
+import { summarizeProblems, validateProgressFile } from "../../src/hook/validator.js";
 
 describe("validateProgressFile", () => {
   it("returns no errors for the valid fixture", async () => {
@@ -27,5 +27,17 @@ describe("validateProgressFile", () => {
   it("reports when the progress file is missing", async () => {
     const errors = await validateProgressFile("tests/fixtures/does-not-exist/Progress.md");
     expect(errors[0]).toContain("Progress file not found");
+  });
+});
+
+describe("summarizeProblems", () => {
+  it("lists the first three problems and names the command", () => {
+    expect(summarizeProblems(["a", "b", "c", "d"], "node cli.js compact .")).toBe(
+      "Progress file problems: a; b; c (+1 more). Preview the cleanup with `node cli.js compact .`, then add --write."
+    );
+  });
+
+  it("omits the command when none applies", () => {
+    expect(summarizeProblems(["a"], undefined)).toBe("Progress file problems: a.");
   });
 });
