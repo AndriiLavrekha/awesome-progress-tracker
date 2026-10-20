@@ -1,9 +1,9 @@
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { applyArchive, compactProgress, compactSessionLog, compactTasks, insertArchiveRun, planCompaction, renderArchiveRun, type CompactResult } from "../src/compact.js";
-import { compactProject, parseArgs } from "../src/cli.js";
+import { compactProject, parseArgs, runCli, withWritten } from "../src/cli.js";
 import { repairEncoding } from "../src/encoding.js";
 
 const FM = "---\nproject: Demo\nstatus: active\n---\n";
@@ -287,6 +287,39 @@ describe("compactProject", () => {
     expect(await read(root, "Archive.md")).toBe(
       "# Archive\n\n## Compacted 2026-10-20\n\n### From Progress.md\n\n#### Historical\n\nold\n\n## Archived Done Items\n\n### 2026-10-01\n\n- [x] older\n"
     );
+  });
+
+  it("rejects a file that is not valid UTF-8 and leaves it untouched", async () => {
+    const bytes = Buffer.from([...Buffer.from(progress("\n## Historical\n\nold\n")), 0x63, 0x61, 0x66, 0xe9, 0x0a]);
+    const root = await project({});
+    const file = path.join(root, "project-progress", "Progress.md");
+    await fs.writeFile(file, bytes);
+    await expect(compactProject({ targetDir: root, write: true })).rejects.toThrow("Progress.md is not valid UTF-8");
+    expect(Buffer.compare(await fs.readFile(file), bytes)).toBe(0);
+  });
+
+  it("reports afterBytes with the file's own line endings", async () => {
+    const root = await project({ "Progress.md": progress("\n## Historical\n\nold\n").replace(/\n/g, "\r\n") });
+    const dry = await compactProject({ targetDir: root, date: "2026-10-20" });
+    await compactProject({ targetDir: root, write: true, date: "2026-10-20" });
+    const size = (await fs.stat(path.join(root, "project-progress", "Progress.md"))).size;
+    expect(dry.files.find((file) => file.file === "Progress.md")?.afterBytes).toBe(size);
+  });
+
+  it("names the files already written in a partial-failure message", () => {
+    expect(withWritten("boom", [])).toBe("boom");
+    expect(withWritten("boom", ["Archive.md", "Progress.md"])).toBe("boom Already written: Archive.md, Progress.md.");
+  });
+
+  it("labels a whitespace-only write", async () => {
+    const root = await project({ "Progress.md": `${progress()}\n\n` });
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    try {
+      await runCli(["compact", root, "--write"]);
+      expect(log.mock.calls[0][0]).toBe("compact: written (whitespace only)");
+    } finally {
+      log.mockRestore();
+    }
   });
 
   it("refuses a folder without Progress.md", async () => {

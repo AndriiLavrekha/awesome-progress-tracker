@@ -281,12 +281,19 @@ export interface SourceFile {
 export async function readProgressFiles(progressDir: string): Promise<Map<string, SourceFile>> {
   const files = new Map<string, SourceFile>();
   for (const name of COMPACT_FILES) {
-    let raw: string;
+    let bytes: Buffer;
     try {
-      raw = await fs.readFile(path.join(progressDir, name), "utf-8");
+      bytes = await fs.readFile(path.join(progressDir, name));
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
       throw error;
+    }
+    // A lossy decode would turn a Latin-1 byte into U+FFFD and --write would persist it. ignoreBOM keeps a BOM, as fs.readFile does.
+    let raw: string;
+    try {
+      raw = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
+    } catch {
+      throw new Error(`${name} is not valid UTF-8; convert it to UTF-8 before running compact.`);
     }
     files.set(name, { raw, text: raw.replace(/\r\n/g, "\n"), eol: raw.includes("\r\n") ? "\r\n" : "\n" });
   }

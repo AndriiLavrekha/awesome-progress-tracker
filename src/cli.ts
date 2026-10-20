@@ -1043,7 +1043,7 @@ export async function compactProject(options: { targetDir?: string; write?: bool
     files: [...sources].map(([name, source]) => ({
       file: name,
       beforeBytes: Buffer.byteLength(source.raw, "utf-8"),
-      afterBytes: Buffer.byteLength(plan.outputs.get(name) ?? source.text, "utf-8"),
+      afterBytes: Buffer.byteLength((plan.outputs.get(name) ?? source.text).replace(/\n/g, source.eol), "utf-8"),
       moved: plan.moved.get(name) ?? []
     })),
     folded: plan.folded.length,
@@ -1052,6 +1052,7 @@ export async function compactProject(options: { targetDir?: string; write?: bool
   };
   if (!options.write || plan.outputs.size === 0) return report;
 
+  const written: string[] = [];
   try {
     // Any change since planning means another writer is active; stop before the archive grows.
     for (const [name, source] of sources) {
@@ -1064,18 +1065,26 @@ export async function compactProject(options: { targetDir?: string; write?: bool
       await updateArchiveFile(progressDir, (current) =>
         applyArchive(current.replace(/\r\n/g, "\n"), plan).replace(/\n/g, eol)
       );
+      written.push("Archive.md");
     }
     for (const [name, text] of plan.outputs) {
       const source = sources.get(name)!;
       await writeFileAtomic(path.join(progressDir, name), text.replace(/\n/g, source.eol), sha256(source.raw));
+      written.push(name);
     }
   } catch (error) {
     if (error instanceof ProgressConflictError) {
-      throw new Error(`${path.basename(error.filePath)} changed while compact was running; rerun compact.`);
+      throw new Error(withWritten(`${path.basename(error.filePath)} changed while compact was running; rerun compact.`, written));
     }
+    if (written.length > 0 && error instanceof Error) throw new Error(withWritten(error.message, written));
     throw error;
   }
   return { ...report, written: true };
+}
+
+// A failure after the first write leaves the folder half-compacted; say which files already changed.
+export function withWritten(message: string, written: string[]): string {
+  return written.length > 0 ? `${message} Already written: ${written.join(", ")}.` : message;
 }
 
 function formatKb(bytes: number): string {
@@ -1223,9 +1232,13 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
 
   if (parsed.command === "compact") {
     const report = await compactProject({ targetDir: parsed.targetDir, write: parsed.write });
+    const whitespaceOnly =
+      report.folded === 0 && report.repaired.length === 0 && report.files.every((file) => file.moved.length === 0);
     console.log(
       report.written
-        ? "compact: written"
+        ? whitespaceOnly
+          ? "compact: written (whitespace only)"
+          : "compact: written"
         : parsed.write
           ? "compact: nothing to change"
           : "compact: dry run, nothing written (add --write to apply)"
