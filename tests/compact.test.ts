@@ -1,5 +1,9 @@
+import { promises as fs } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { applyArchive, compactProgress, compactSessionLog, compactTasks, insertArchiveRun, planCompaction, renderArchiveRun, type CompactResult } from "../src/compact.js";
+import { compactProject, parseArgs } from "../src/cli.js";
 import { repairEncoding } from "../src/encoding.js";
 
 const FM = "---\nproject: Demo\nstatus: active\n---\n";
@@ -227,5 +231,66 @@ describe("insertArchiveRun / applyArchive", () => {
 
   it("appends the run when there is no Archived Done Items heading", () => {
     expect(insertArchiveRun("# Archive\n", "## Compacted x\n")).toBe("# Archive\n\n## Compacted x\n");
+  });
+});
+
+describe("compactProject", () => {
+  async function project(files: Record<string, string>): Promise<string> {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "pp-compact-"));
+    await fs.mkdir(path.join(root, "project-progress"));
+    for (const [name, content] of Object.entries(files)) {
+      await fs.writeFile(path.join(root, "project-progress", name), content, "utf-8");
+    }
+    return root;
+  }
+  const read = (root: string, name: string) => fs.readFile(path.join(root, "project-progress", name), "utf-8");
+
+  it("parses --write", () => {
+    expect(parseArgs(["compact", "dir", "--write"])).toMatchObject({ command: "compact", targetDir: "dir", write: true });
+  });
+
+  it("dry run reports moves and writes nothing", async () => {
+    const input = progress("\n## Historical\n\nold\n");
+    const root = await project({ "Progress.md": input });
+    const report = await compactProject({ targetDir: root, date: "2026-10-20" });
+    expect(report.written).toBe(false);
+    expect(report.files.find((file) => file.file === "Progress.md")?.moved).toEqual(["## Historical"]);
+    expect(await read(root, "Progress.md")).toBe(input);
+    await expect(fs.access(path.join(root, "project-progress", "Archive.md"))).rejects.toThrow();
+  });
+
+  it("--write creates Archive.md, keeps CRLF, and a second run moves nothing", async () => {
+    const root = await project({
+      "Progress.md": progress("\n## Historical\n\nold\n").replace(/\n/g, "\r\n"),
+      "Session Log.md": "# Session Log\n\n## 2026-10-02 b\n\nb\n\n## 2026-10-01 a\n\na\n"
+    });
+    const report = await compactProject({ targetDir: root, write: true, date: "2026-10-20" });
+    expect(report.written).toBe(true);
+    expect(await read(root, "Progress.md")).toBe(progress().replace(/\n/g, "\r\n"));
+    // Archive.md takes Progress.md's line ending.
+    expect(await read(root, "Archive.md")).toBe(
+      "# Archive\n\n## Compacted 2026-10-20\n\n### From Progress.md\n\n#### Historical\n\nold\n".replace(/\n/g, "\r\n")
+    );
+    expect(await read(root, "Session Log.md")).toBe("# Session Log\n\n## 2026-10-01 a\n\na\n\n## 2026-10-02 b\n\nb\n");
+
+    const again = await compactProject({ targetDir: root, write: true, date: "2026-10-21" });
+    expect(again.written).toBe(false);
+    expect(await read(root, "Archive.md")).not.toContain("2026-10-21");
+  });
+
+  it("inserts the run before an existing Archived Done Items section", async () => {
+    const root = await project({
+      "Progress.md": progress("\n## Historical\n\nold\n"),
+      "Archive.md": "# Archive\n\n## Archived Done Items\n\n### 2026-10-01\n\n- [x] older\n"
+    });
+    await compactProject({ targetDir: root, write: true, date: "2026-10-20" });
+    expect(await read(root, "Archive.md")).toBe(
+      "# Archive\n\n## Compacted 2026-10-20\n\n### From Progress.md\n\n#### Historical\n\nold\n\n## Archived Done Items\n\n### 2026-10-01\n\n- [x] older\n"
+    );
+  });
+
+  it("refuses a folder without Progress.md", async () => {
+    const root = await project({});
+    await expect(compactProject({ targetDir: root })).rejects.toThrow("No project-progress/Progress.md");
   });
 });

@@ -8,6 +8,9 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseProjectSummary } from "./mcp/markdown.js";
 import { upsertIndexedProject } from "./mcp/index.js";
 import { main as runMcpServer } from "./mcp/server.js";
+import { sha256 } from "./hash.js";
+import { planCompaction, readProgressFiles, applyArchive } from "./compact.js";
+import { ProgressConflictError, updateArchiveFile, writeFileAtomic } from "./mcp/writer.js";
 import {
   listProjectTrackingStates,
   resetProjectTrackingState,
@@ -201,6 +204,7 @@ Usage:
   awesome-progress-tracker state set [directory] --state opted-in|opted-out|initialized|unknown
   awesome-progress-tracker state reset [directory]
   awesome-progress-tracker init [directory] [--project <name>] [--force]
+  awesome-progress-tracker compact [directory] [--write]
   awesome-progress-tracker mcp
   awesome-progress-tracker help
 
@@ -212,6 +216,7 @@ Commands:
   status  Show project and agent-specific installation status.
   state  List, set, or reset per-project opt-in/opt-out state.
   init   Create project-progress/ Markdown files in a project.
+  compact  Move old progress history into Archive.md (dry run unless --write).
   mcp    Start the Project Progress MCP stdio server.
   help   Show this help.
 
@@ -878,6 +883,7 @@ interface ParsedArgs {
   verify: boolean;
   force: boolean;
   json?: boolean;
+  write?: boolean;
 }
 
 export function parseArgs(argv: string[]): ParsedArgs {
@@ -890,6 +896,8 @@ export function parseArgs(argv: string[]): ParsedArgs {
       parsed.force = true;
     } else if (arg === "--verify") {
       parsed.verify = true;
+    } else if (arg === "--write") {
+      parsed.write = true;
     } else if (arg === "--json") {
       parsed.json = true;
     } else if (arg === "--local") {
@@ -1007,6 +1015,71 @@ function printDoctor(result: DoctorResult, json = false): void {
   for (const check of result.checks) {
     console.log(`${check.ok ? "ok" : "fail"} ${check.name}: ${check.message}`);
   }
+}
+
+export interface CompactReport {
+  progressDir: string;
+  written: boolean;
+  files: Array<{ file: string; beforeBytes: number; afterBytes: number; moved: string[] }>;
+  folded: number;
+  repaired: string[];
+  notes: string[];
+}
+
+export async function compactProject(options: { targetDir?: string; write?: boolean; date?: string } = {}): Promise<CompactReport> {
+  const progressDir = path.join(path.resolve(options.targetDir ?? process.cwd()), "project-progress");
+  const sources = await readProgressFiles(progressDir);
+  if (!sources.has("Progress.md")) {
+    throw new Error(`No project-progress/Progress.md under ${path.dirname(progressDir)}`);
+  }
+
+  const plan = planCompaction(
+    new Map([...sources].map(([name, source]) => [name, source.text])),
+    options.date ?? new Date().toISOString().slice(0, 10)
+  );
+  const report: CompactReport = {
+    progressDir,
+    written: false,
+    files: [...sources].map(([name, source]) => ({
+      file: name,
+      beforeBytes: Buffer.byteLength(source.raw, "utf-8"),
+      afterBytes: Buffer.byteLength(plan.outputs.get(name) ?? source.text, "utf-8"),
+      moved: plan.moved.get(name) ?? []
+    })),
+    folded: plan.folded.length,
+    repaired: plan.repaired,
+    notes: plan.notes
+  };
+  if (!options.write || plan.outputs.size === 0) return report;
+
+  try {
+    // Any change since planning means another writer is active; stop before the archive grows.
+    for (const [name, source] of sources) {
+      const filePath = path.join(progressDir, name);
+      if (sha256(await fs.readFile(filePath, "utf-8")) !== sha256(source.raw)) throw new ProgressConflictError(filePath);
+    }
+    // Archive first: a failure after this point duplicates text in Archive.md instead of losing it.
+    if (plan.run || plan.folded.length > 0) {
+      const eol = sources.get("Progress.md")!.eol;
+      await updateArchiveFile(progressDir, (current) =>
+        applyArchive(current.replace(/\r\n/g, "\n"), plan).replace(/\n/g, eol)
+      );
+    }
+    for (const [name, text] of plan.outputs) {
+      const source = sources.get(name)!;
+      await writeFileAtomic(path.join(progressDir, name), text.replace(/\n/g, source.eol), sha256(source.raw));
+    }
+  } catch (error) {
+    if (error instanceof ProgressConflictError) {
+      throw new Error(`${path.basename(error.filePath)} changed while compact was running; rerun compact.`);
+    }
+    throw error;
+  }
+  return { ...report, written: true };
+}
+
+function formatKb(bytes: number): string {
+  return `${(bytes / 1024).toFixed(1)} KB`;
 }
 
 export async function runCli(argv = process.argv.slice(2)): Promise<number> {
@@ -1145,6 +1218,25 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
       force: parsed.force
     });
     console.log(`Initialized ${result.targetProgressDir}`);
+    return 0;
+  }
+
+  if (parsed.command === "compact") {
+    const report = await compactProject({ targetDir: parsed.targetDir, write: parsed.write });
+    console.log(
+      report.written
+        ? "compact: written"
+        : parsed.write
+          ? "compact: nothing to change"
+          : "compact: dry run, nothing written (add --write to apply)"
+    );
+    for (const file of report.files) {
+      console.log(`${file.file}: ${formatKb(file.beforeBytes)} -> ${formatKb(file.afterBytes)}, ${file.moved.length} blocks moved`);
+      for (const heading of file.moved) console.log(`  - ${heading}`);
+    }
+    if (report.folded > 0) console.log(`Done: ${report.folded} lines folded into Archive.md`);
+    for (const name of report.repaired) console.log(`repaired garbled characters: ${name}`);
+    for (const note of report.notes) console.log(`note: ${note}`);
     return 0;
   }
 
