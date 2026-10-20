@@ -242,14 +242,22 @@ These wrappers run the compiled hook (`dist/src/hook/cli.js`) on Node — run `n
 
 ## Keep Progress Files Small
 
-Hooks report when progress files grow: session start shows a `Progress health:` line and the stop hook lists problems once per session. `compact` moves old history into `Archive.md` without rewriting it:
+Hooks report when progress files grow: session start shows a `Progress health:` line and the stop hook lists problems once per session. `compact` moves old history into `Archive.md` verbatim apart from heading levels:
 
 ```bash
 awesome-progress-tracker compact            # preview what moves
 awesome-progress-tracker compact --write    # apply
 ```
 
-It moves unknown `Progress.md` sections, Session Log entries beyond the newest 20, finished `Tasks.md` sections (any `##` section without an open task, so keep reference notes elsewhere), and old checked tasks, and repairs garbled characters. Commit before running `--write` so the move is one reviewable diff.
+The directory argument is optional and defaults to the current directory. For plugin installs without the binary on PATH, use the exact `node "…/cli.js" compact "…"` command the hook message prints, or `npx awesome-progress-tracker compact`.
+
+It moves:
+
+- unknown or duplicate `Progress.md` sections and old `Done` items
+- `Session Log.md` dated entries beyond the newest 20 (undated entries stay)
+- finished `Tasks.md` `##` sections (no open task) beyond the newest 3, so keep reference notes elsewhere, and checked tasks beyond the newest 10
+
+It also repairs garbled characters in all five progress files and refuses files that are not valid UTF-8. Commit before running `--write` so the move is one reviewable diff.
 
 ## MCP Server
 
