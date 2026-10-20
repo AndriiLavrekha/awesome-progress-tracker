@@ -1,5 +1,6 @@
 // Characters whose UTF-8 bytes, misread as Windows-1252, produce the garbled
 // text that Windows tools write when they save UTF-8 with the wrong encoding.
+// shortcut: rare false positives (a capital Ã or Â right before one of these bytes, e.g. Portuguese "IRMÃ" + NBSP) get "repaired", also inside code fences; narrow the list if that ever bites.
 const REPAIRABLE = "—–‘’“”…•·×→ÄÖÜäöüßéèàç";
 
 // Windows-1252 differs from Latin-1 only in 0x80-0x9F. Spelled out because
@@ -25,9 +26,9 @@ const GARBLED: Array<[string, string]> = [
 ];
 
 export function repairEncoding(text: string): string {
-  let repaired = text.replace(/^\uFEFF/, "");
+  let repaired = text;
   for (const [garbled, char] of GARBLED) repaired = repaired.split(garbled).join(char);
-  return repaired;
+  return repaired.replace(/^\uFEFF/, "");
 }
 
 export function hasMojibake(text: string): boolean {
