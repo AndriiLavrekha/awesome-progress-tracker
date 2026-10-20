@@ -17,6 +17,7 @@ import {
   replaceFrontmatterValue,
   replaceSection,
   replaceSectionWithOperation,
+  updateArchiveFile,
   writeFileAtomic,
   ProgressConflictError,
   validateLastMilestone,
@@ -308,6 +309,22 @@ export function conflictPayload(
   return payload;
 }
 
+// Called after the guarded Progress.md write (ADR 0020). Progress.md has
+// already dropped these items, so a failed archive write hands them back
+// instead of losing them.
+export async function archiveFoldedItems(
+  progressPath: string,
+  items: string[]
+): Promise<{ archiveError?: string; unarchivedItems?: string[] }> {
+  if (items.length === 0) return {};
+  try {
+    await updateArchiveFile(path.dirname(progressPath), (current) => appendToArchive(current, items));
+    return {};
+  } catch (error) {
+    return { archiveError: error instanceof Error ? error.message : String(error), unarchivedItems: items };
+  }
+}
+
 // Deliberately does NOT route through textResult. That helper collapses any
 // payload carrying a string `error` into errorResult("invalid_request", ...),
 // which would discard currentContent and currentFrontmatter — the entire
@@ -445,16 +462,18 @@ export function createServer(): McpServer {
 
       await upsertIndexedProject(parseProjectSummary(updated, match.progressPath));
 
-      // Archiving only after the guarded write lands. Folding entries into
-      // Archive.md first would move Done items that were never removed from
-      // Progress.md when the write lost a race.
-      if (archived.length > 0) {
-        const archivePath = path.join(path.dirname(match.progressPath), "Archive.md");
-        const archiveMarkdown = await fs.readFile(archivePath, "utf-8").catch(() => "# Archive\n");
-        await fs.writeFile(archivePath, appendToArchive(archiveMarkdown, archived), "utf-8");
-      }
-
-      return textResult(JSON.stringify({ updated: true, operation: result.operation, project, section, archived: archived.length, updatedAt: new Date().toISOString(), progressPath: match.progressPath }));
+      // Archiving only after the guarded write lands (ADR 0020).
+      const archive = await archiveFoldedItems(match.progressPath, archived);
+      return textResult(JSON.stringify({
+        updated: true,
+        operation: result.operation,
+        project,
+        section,
+        archived: archive.unarchivedItems ? 0 : archived.length,
+        ...archive,
+        updatedAt: new Date().toISOString(),
+        progressPath: match.progressPath
+      }));
     }
   );
 

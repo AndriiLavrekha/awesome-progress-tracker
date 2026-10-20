@@ -3,6 +3,7 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
+  archiveFoldedItems,
   boundProjectSummaries,
   conflictPayload,
   compactProjectListItem,
@@ -499,5 +500,22 @@ describe("ambiguity reporting", () => {
         expect(resolution.error).toContain("C:/repo/project-progress/Progress.md");
       }
     );
+  });
+});
+
+describe("archiveFoldedItems", () => {
+  it("archives folded Done items", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "pp-fold-"));
+    const progressPath = path.join(dir, "Progress.md");
+    expect(await archiveFoldedItems(progressPath, ["- [x] old"])).toEqual({});
+    expect(await fs.readFile(path.join(dir, "Archive.md"), "utf-8")).toContain("- [x] old");
+  });
+
+  it("hands folded items back when the archive cannot be written", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "pp-fold-"));
+    await fs.mkdir(path.join(dir, "Archive.md"));
+    const result = await archiveFoldedItems(path.join(dir, "Progress.md"), ["- [x] old"]);
+    expect(result.unarchivedItems).toEqual(["- [x] old"]);
+    expect(result.archiveError).toBeTruthy();
   });
 });
