@@ -227,11 +227,30 @@ describe("scanLines", () => {
     ]);
     expect(markdown.slice(lines[4].offset, lines[4].offset + lines[4].length)).toBe("## yes\n");
   });
+
+  it("keeps CRLF in offsets and lengths but not in text", () => {
+    const markdown = "a\r\n## b\r\n";
+    const lines = scanLines(markdown);
+    expect(lines.map((line) => [line.text, line.offset, line.length])).toEqual([
+      ["a", 0, 3],
+      ["## b", 3, 6]
+    ]);
+    expect(markdown.slice(lines[1].offset, lines[1].offset + lines[1].length)).toBe("## b\r\n");
+  });
+
+  it("treats every line after a never-closed fence as fenced", () => {
+    const lines = scanLines("a\n```\n## x\n- [ ] y\n");
+    expect(lines.map((line) => line.inFence)).toEqual([false, true, true, true]);
+  });
 });
 
 describe("splitFrontmatter", () => {
   it("splits a leading frontmatter block from the body", () => {
     expect(splitFrontmatter("---\na: 1\n---\n\n# T\n")).toEqual({ frontmatter: "---\na: 1\n---\n", body: "\n# T\n" });
+  });
+
+  it("accepts an empty frontmatter block", () => {
+    expect(splitFrontmatter("---\n---\nbody")).toEqual({ frontmatter: "---\n---\n", body: "body" });
   });
 
   it("returns the whole text as body when there is no frontmatter", () => {

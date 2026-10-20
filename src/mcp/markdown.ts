@@ -111,8 +111,9 @@ export function splitLinesWithEndings(markdown: string): string[] {
   return lines.filter((line, index) => line.length > 0 || index < lines.length - 1);
 }
 
-const FRONTMATTER_RE = /^---\r?\n[\s\S]*?\r?\n---[ \t]*(?:\r?\n|$)/;
+const FRONTMATTER_RE = /^---\r?\n(?:[\s\S]*?\r?\n)?---[ \t]*(?:\r?\n|$)/;
 
+// Callers strip a leading BOM first (repairEncoding), so the regex does not handle it.
 export function splitFrontmatter(markdown: string): { frontmatter: string; body: string } {
   const match = markdown.match(FRONTMATTER_RE);
   return match
