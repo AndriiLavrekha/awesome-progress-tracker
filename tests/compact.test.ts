@@ -170,6 +170,26 @@ describe("compactTasks", () => {
     expect(compactTasks(`# Tasks\n\n## Active\n\n- [ ] open\n\n${fenced}`).moved).toEqual([]);
   });
 
+  it("never moves a block holding an open task in another list syntax", () => {
+    const finished = Array.from({ length: 3 }, (_, i) => `## Done ${i}\n\nprose ${i}\n`).join("\n");
+    const input = `# Tasks\n\n## A\n\n+ [ ] x\n\n## B\n\n1. [ ] x\n\n## C\n\n> - [ ] x\n\n${finished}`;
+    expect(compactTasks(input)).toEqual({ kept: input, moved: [], folded: [], notes: [] });
+  });
+
+  it("never moves a checked task with a numbered open child", () => {
+    const rest = Array.from({ length: 10 }, (_, i) => `- [x] later ${i}`).join("\n");
+    const result = compactTasks(`# Tasks\n\n## Active\n\n- [x] parent\n  1. [ ] child\n${rest}\n`);
+    expect(result.moved).toEqual([]);
+    expect(result.kept).toContain("- [x] parent\n  1. [ ] child");
+  });
+
+  it("keeps a checked task followed by a lazy continuation line", () => {
+    const rest = Array.from({ length: 10 }, (_, i) => `- [x] l${i}`).join("\n");
+    const result = compactTasks(`# Tasks\n\n- [ ] keep\n- [x] first\nlazy text\n${rest}\n`);
+    expect(result.kept).toContain("- [x] first\nlazy text");
+    expect(result.moved).toEqual([]);
+  });
+
   it("leaves a small file unchanged", () => {
     const input = "# Tasks\n\n- [ ] a\n- [x] b\n";
     expect(compactTasks(input)).toEqual({ kept: input, moved: [], folded: [], notes: [] });

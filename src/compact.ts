@@ -145,7 +145,7 @@ export function compactSessionLog(text: string): CompactResult {
 
   const dated = entries
     .filter((item) => item.key !== undefined)
-    .sort((a, b) => a.key!.localeCompare(b.key!) || a.index - b.index);
+    .sort((a, b) => (a.key! < b.key! ? -1 : a.key! > b.key! ? 1 : 0) || a.index - b.index);
   const keep = new Set(dated.slice(-SESSION_LOG_KEEP));
   moved.push(...entries.filter((item) => item.key !== undefined && !keep.has(item)).map((item) => item.block.text));
 
@@ -155,7 +155,7 @@ export function compactSessionLog(text: string): CompactResult {
   return { kept: joinBlocks(frontmatter, kept), moved: dedupe(moved), folded: [], notes };
 }
 
-const OPEN_TASK_RE = /^\s*[-*] \[ \](\s|$)/;
+const OPEN_TASK_RE = /^[\s>]*(?:[-*+]|\d+[.)]) \[ \](\s|$)/;
 const CHECKED_TASK_RE = /^[-*] \[[xX]\](\s|$)/;
 
 function hasOpenTask(lines: ScannedLine[]): boolean {
@@ -177,8 +177,11 @@ function moveCheckedTasks(blocks: Block[]): { kept: Block[]; groups: string[] } 
         else if (lines[next].text.trim() !== "") break;
       }
       const task = lines.slice(index, end);
+      const after = lines[end]?.text;
+      // A flush-left plain line right after the task is a lazy continuation; moving the task would attach that note to the previous task.
+      const lazy = after !== undefined && after.trim() !== "" && !/^\s/.test(after) && !/^(?:[-*+]|\d+[.)])\s/.test(after) && !/^#{1,6}\s/.test(after);
       // Moving part of a fence would leave an unclosed fence in both files.
-      if (!task.some((line) => line.inFence) && !hasOpenTask(task)) {
+      if (!lazy && !task.some((line) => line.inFence) && !hasOpenTask(task)) {
         tasks.push({ block, start: index, end, heading: block.level === 0 ? "Tasks" : block.title });
       }
       index = end - 1;
