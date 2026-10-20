@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compactProgress, compactSessionLog, compactTasks, renderArchiveRun, type CompactResult } from "../src/compact.js";
+import { applyArchive, compactProgress, compactSessionLog, compactTasks, insertArchiveRun, planCompaction, renderArchiveRun, type CompactResult } from "../src/compact.js";
 import { repairEncoding } from "../src/encoding.js";
 
 const FM = "---\nproject: Demo\nstatus: active\n---\n";
@@ -193,5 +193,39 @@ describe("compactTasks", () => {
   it("leaves a small file unchanged", () => {
     const input = "# Tasks\n\n- [ ] a\n- [x] b\n";
     expect(compactTasks(input)).toEqual({ kept: input, moved: [], folded: [], notes: [] });
+  });
+});
+
+describe("planCompaction", () => {
+  it("collects new texts, moved headings, the archive run and repaired files", () => {
+    const files = new Map([
+      ["Progress.md", progress("\n## Historical\n\nold\n", bigDone)],
+      ["Decisions.md", "# Decisions\n\nUse \u00e2\u20ac\u201d dashes.\n"],
+      ["Open Questions.md", "# Open Questions\n"]
+    ]);
+    const plan = planCompaction(files, "2026-10-20");
+    expect([...plan.outputs.keys()]).toEqual(["Progress.md", "Decisions.md"]);
+    expect(plan.outputs.get("Decisions.md")).toBe("# Decisions\n\nUse — dashes.\n");
+    expect(plan.moved.get("Progress.md")).toEqual(["## Historical"]);
+    expect(plan.folded.length).toBeGreaterThan(0);
+    expect(plan.repaired).toEqual(["Decisions.md"]);
+    expect(plan.run).toBe("## Compacted 2026-10-20\n\n### From Progress.md\n\n#### Historical\n\nold\n");
+  });
+});
+
+describe("insertArchiveRun / applyArchive", () => {
+  it("inserts the run before Archived Done Items and appends folded lines under it", () => {
+    const archive = "# Archive\n\n## Archived Done Items\n\n### 2026-10-01\n\n- [x] older\n";
+    const run = "## Compacted 2026-10-20\n\n### From Progress.md\n\n#### Old\n\nold\n";
+    expect(insertArchiveRun(archive, run)).toBe(
+      "# Archive\n\n## Compacted 2026-10-20\n\n### From Progress.md\n\n#### Old\n\nold\n\n## Archived Done Items\n\n### 2026-10-01\n\n- [x] older\n"
+    );
+    const applied = applyArchive(archive, { run, folded: ["- [x] newer"] });
+    expect(applied.indexOf("## Compacted")).toBeLessThan(applied.indexOf("## Archived Done Items"));
+    expect(applied.trimEnd().endsWith("- [x] newer")).toBe(true);
+  });
+
+  it("appends the run when there is no Archived Done Items heading", () => {
+    expect(insertArchiveRun("# Archive\n", "## Compacted x\n")).toBe("# Archive\n\n## Compacted x\n");
   });
 });

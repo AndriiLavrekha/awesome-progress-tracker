@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { promises as fs } from "node:fs";
+import { promises as fs, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { sha256 } from "../../src/hash.js";
@@ -13,6 +13,7 @@ import {
   replaceFrontmatterValue,
   replaceSection,
   replaceSectionWithOperation,
+  updateArchiveFile,
   writeFileAtomic,
   validateLastMilestone,
   validateSectionContent,
@@ -215,5 +216,33 @@ describe("interleaved writes", () => {
 
     const final = await fs.readFile(filePath, "utf-8");
     expect(final === writerA || final === writerB).toBe(true);
+  });
+});
+
+describe("updateArchiveFile", () => {
+  it("creates Archive.md when missing, then updates it", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "pp-archive-"));
+    await updateArchiveFile(dir, (current) => `${current}one\n`);
+    expect(await fs.readFile(path.join(dir, "Archive.md"), "utf-8")).toBe("# Archive\none\n");
+    await updateArchiveFile(dir, (current) => `${current}two\n`);
+    expect(await fs.readFile(path.join(dir, "Archive.md"), "utf-8")).toBe("# Archive\none\ntwo\n");
+  });
+
+  it("reports a conflict when another writer creates Archive.md first", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "pp-archive-"));
+    const archivePath = path.join(dir, "Archive.md");
+    await expect(
+      updateArchiveFile(dir, (current) => {
+        writeFileSync(archivePath, "# Archive\nother\n");
+        return current;
+      })
+    ).rejects.toBeInstanceOf(ProgressConflictError);
+    expect(await fs.readFile(archivePath, "utf-8")).toBe("# Archive\nother\n");
+  });
+
+  it("throws when Archive.md cannot be read", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "pp-archive-"));
+    await fs.mkdir(path.join(dir, "Archive.md"));
+    await expect(updateArchiveFile(dir, (current) => current)).rejects.toThrow();
   });
 });

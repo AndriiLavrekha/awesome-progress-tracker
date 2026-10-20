@@ -169,6 +169,27 @@ export async function writeFileAtomic(
   });
 }
 
+// writeFileAtomic needs an existing file to compare against, so a missing
+// archive is created with exclusive create: a concurrent creator makes this
+// fail as a conflict instead of being overwritten.
+export async function updateArchiveFile(progressDir: string, transform: (current: string) => string): Promise<void> {
+  const archivePath = path.join(progressDir, "Archive.md");
+  let current: string;
+  try {
+    current = await fs.readFile(archivePath, "utf-8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    try {
+      await fs.writeFile(archivePath, transform("# Archive\n"), { encoding: "utf-8", flag: "wx" });
+    } catch (createError) {
+      if ((createError as NodeJS.ErrnoException).code === "EEXIST") throw new ProgressConflictError(archivePath);
+      throw createError;
+    }
+    return;
+  }
+  await writeFileAtomic(archivePath, transform(current), sha256(current));
+}
+
 export function replaceFrontmatterValue(markdown: string, key: string, value: string): string {
   const lines = splitLinesWithEndings(markdown);
   const hasFrontmatter = lines[0]?.trim() === "---";

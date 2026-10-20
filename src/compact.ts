@@ -1,7 +1,9 @@
-import { repairEncoding } from "./encoding.js";
-import { scanLines, splitFrontmatter } from "./mcp/markdown.js";
+import { promises as fs } from "node:fs";
+import path from "node:path";
+import { hasMojibake, repairEncoding } from "./encoding.js";
+import { scanLines, sectionMatches, splitFrontmatter } from "./mcp/markdown.js";
 import type { ScannedLine } from "./mcp/markdown.js";
-import { ALLOWED_PROGRESS_SECTIONS, foldDoneSection } from "./mcp/writer.js";
+import { ALLOWED_PROGRESS_SECTIONS, appendToArchive, foldDoneSection } from "./mcp/writer.js";
 
 // The template ships `## Verification`, which the MCP write tool does not
 // accept but which is still a legitimate section.
@@ -218,4 +220,75 @@ export function compactTasks(text: string): CompactResult {
   const { kept, groups } = moveCheckedTasks(blocks.filter((block) => !movedBlocks.has(block)));
   const moved = [...blocks.filter((block) => movedBlocks.has(block)).map((block) => block.text), ...groups];
   return { kept: joinBlocks(frontmatter, kept), moved: dedupe(moved), folded: [], notes: [] };
+}
+
+export const COMPACT_FILES = ["Progress.md", "Session Log.md", "Tasks.md", "Decisions.md", "Open Questions.md"] as const;
+
+export interface CompactionPlan {
+  outputs: Map<string, string>;
+  moved: Map<string, string[]>;
+  run: string;
+  folded: string[];
+  repaired: string[];
+  notes: string[];
+}
+
+function compactFile(name: string, text: string): CompactResult {
+  if (name === "Progress.md") return compactProgress(text);
+  if (name === "Session Log.md") return compactSessionLog(text);
+  if (name === "Tasks.md") return compactTasks(text);
+  return { kept: repairEncoding(text), moved: [], folded: [], notes: [] };
+}
+
+// files: name -> LF text. Pure; the CLI and the health check both use it.
+export function planCompaction(files: Map<string, string>, date: string): CompactionPlan {
+  const plan: CompactionPlan = { outputs: new Map(), moved: new Map(), run: "", folded: [], repaired: [], notes: [] };
+  const sources: ArchiveSource[] = [];
+  for (const [name, text] of files) {
+    const result = compactFile(name, text);
+    if (result.kept !== text) plan.outputs.set(name, result.kept);
+    if (result.moved.length > 0) {
+      plan.moved.set(name, result.moved.map((block) => block.split("\n")[0]));
+      sources.push({ file: name, blocks: result.moved });
+    }
+    if (result.folded.length > 0) plan.folded = result.folded;
+    if (hasMojibake(text)) plan.repaired.push(name);
+    plan.notes.push(...result.notes);
+  }
+  plan.run = renderArchiveRun(date, sources);
+  return plan;
+}
+
+export function insertArchiveRun(archive: string, run: string): string {
+  if (!run) return archive;
+  const doneItems = sectionMatches(archive).find((match) => match.title === "Archived Done Items");
+  if (!doneItems) return `${archive.trimEnd()}\n\n${run}`;
+  return `${archive.slice(0, doneItems.start).trimEnd()}\n\n${run}\n${archive.slice(doneItems.start)}`;
+}
+
+// The run goes before `## Archived Done Items` so that heading stays last and
+// every later append (here and in the MCP fold) lands under it.
+export function applyArchive(archive: string, plan: Pick<CompactionPlan, "run" | "folded">): string {
+  return appendToArchive(insertArchiveRun(archive, plan.run), plan.folded);
+}
+
+export interface SourceFile {
+  raw: string;
+  text: string;
+  eol: string;
+}
+
+export async function readProgressFiles(progressDir: string): Promise<Map<string, SourceFile>> {
+  const files = new Map<string, SourceFile>();
+  for (const name of COMPACT_FILES) {
+    let raw: string;
+    try {
+      raw = await fs.readFile(path.join(progressDir, name), "utf-8");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+      throw error;
+    }
+    files.set(name, { raw, text: raw.replace(/\r\n/g, "\n"), eol: raw.includes("\r\n") ? "\r\n" : "\n" });
+  }
+  return files;
 }
