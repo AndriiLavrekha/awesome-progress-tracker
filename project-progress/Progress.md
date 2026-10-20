@@ -1,19 +1,22 @@
 ---
-checkpoint_at: 2026-08-31T14:54:40Z
+checkpoint_at: 2026-10-20T16:31:14Z
 worktree_dirty: true
-base_branch: main
-base_commit: 3a5e500f31ddeb5fee8c5b1232583db4ee128001
-session_id: 5b098510-9ff8-4473-b10a-00021a2363e8
+base_branch: feat/progress-compaction
+base_commit: ce19a80989a1d111eaa81b06fec78be9f93244a8
+session_id: d83fb21f-daf8-454f-99a9-7f5b389b393f
 handoff: clean
 project: progress-tracker
 progress_schema_version: 1
-status: in_progress
+status: active
 path: C:/Users/nkinc/Documents/progress-tracker
 agent_last_used: claude
-updated: 2026-08-20
-last_milestone: v0.4.1 published to GitHub
+provider_last_used: claude-code
+model_last_used: claude-opus-5-5
+effort_last_used: unknown
+updated: 2026-10-20
+last_milestone: v0.6.0 released with progress compaction
 deployed: true
-deployment_url: https://github.com/AndriiLavrekha/awesome-progress-tracker/releases/tag/v0.4.1
+deployment_url: https://github.com/AndriiLavrekha/awesome-progress-tracker/releases/tag/v0.6.0
 sensitivity: normal
 commit_progress: true
 ---
@@ -22,23 +25,10 @@ commit_progress: true
 
 ## Resume Snapshot
 
-Verified the Hermes integration is complete against its own spec (ADR 0015 + design doc): all 5 CLI workflows (`install`/`install-mcp`/`status`/`doctor`/`uninstall -g hermes`) implemented in `src/cli.ts`, collision checks and rollback in place, 152 hermes-referencing test assertions across `tests/mcp/cli.test.ts` and `tests/hook/instruction-pack.test.ts`, skill URL pinned to the existing `v0.4.2` tag, build clean, 308/308 tests passing. Lifecycle hooks are deferred by design, not missing.
+`v0.6.0` is released (tag and GitHub release, `main` at `811e41a` plus this progress commit). It ships progress compaction: `awesome-progress-tracker compact [dir] [--write]` (dry run default; Archive.md written first; refuses non-UTF-8; repairs Windows-1252 mojibake), SessionStart `Progress health:` line, stop hook reporting all validator problems once per session, and an MCP Done fold that returns `unarchivedItems` instead of losing them. Built subagent-driven from `docs/superpowers/plans/2026-10-20-progress-compaction.md`; every task passed spec and quality review and a final whole-branch review. Tests 396/397 under WSL (1 pre-existing WSL-only failure).
 
-README, TESTING.md, docs/demo-use-cases.md, and docs/glossary.md were refined for readability: README 482→354 lines and TESTING.md 357→197 lines, cutting repetition (per-agent command variants collapsed into reference tables) without losing coverage; demo-use-cases.md tightened 440→334 lines. `docs/glossary.md` (74→25 lines) dropped terms describing the pre-ADR-0015 Hermes plugin design (`hermes-plugin/` directory, `pre_llm_call` resume injection, restricted-progress commit guard) that was superseded by the simpler skill+MCP path and never built — those terms were misleading, not just verbose. `tests/hook/instruction-pack.test.ts` asserts exact phrasing in README.md/TESTING.md; that phrasing was preserved during the rewrite and the full suite still passes.
+Deferred minors: Archive.md takes Progress.md's line ending; archive dates are UTC; the stop-hook problem summary reaches only the user when Progress.md is fresh; near-miss section notes match title prefixes only. Benchmark runs 01–03 still unrecorded; Codex `stop-soft` promotion still open.
 
-`feat/hermes-integration-resume` is merged into `main` and pushed to `origin/main` (`c67ed96`, then `3a5e500`, then `605c3ce` and the doc-refinement commit above). The merge was a fast-forward of `72c0a60`; a follow-up commit `c67ed96` resolved a `checkpoint_at` frontmatter conflict in this file against local uncommitted state, which was stashed and restored cleanly (no other changes lost — the stashed `marketplace.json` edit already matched `HEAD`). `origin/main` now carries the Hermes resume/verification work described below.
-
-The long-untracked `docs/adr/0001-0014` (predating the already-tracked `0015-0023` series), `docs/demo-use-cases.md`, and `docs/glossary.md` are now committed to `main` — they were real product docs, not scratch. `.hermes/plans/` is added to `.gitignore` as session scratch, matching the existing `/project-progress/` pattern.
-
-The prompt-time initialization bug is fixed and published in v0.4.2. `handleUserPromptSubmit` reuses the consent guidance, both Codex and Claude manifests invoke it, and the release tag is live on GitHub. The remote main branch also includes the latest README cleanup from the concurrent remote update.
-
-Hermes Skill + MCP integration was revalidated on 2026-08-28 in an isolated `HERMES_HOME` using the packed `awesome-progress-tracker@0.4.2` artifact and Hermes Agent v0.20.6. Managed install, list discovery, MCP connection/tool discovery, package status, JSON doctor, opt-out state, and uninstall all passed. The README now links to the authoritative Hermes installation instructions rather than obsolete package commands. A real model-backed Hermes agent using disposable Codex OAuth completed `refresh_projects`, `list_projects`, `read_project_progress`, and `update_project_progress`, then confirmed the exact Next Action through a second MCP read.
-
-Plans A through D and the v0.4.2 prompt-hook fix are merged to `main`. The literal-path MCP resolution fix is committed as `cd7962e`, scenario 03 as `adcba7b`, and package/plugin manifests now target `0.4.2`.
-
-Benchmark scenario 03 (`03-runtime-exception`) is now built with a complete repository bundle, tracker overlay, expected scoring contract, and a runtime-only compatibility exception that makes the forbidden migration type-check compatible but incorrect. `bench:build`, all 51 benchmark tests, and both tracker/baseline setup paths pass.
-
-`v0.4.1` is published at the GitHub release URL above. `dist/src` is committed and current. The benchmark has not yet been run with independent agents, so `bench/RESULTS.md` remains intentionally unfilled.
 
 ## Current State
 
@@ -56,14 +46,24 @@ The approved direction is skill-first and project-local:
 
 ## Last Session
 
-Created `feat/hermes-integration-resume` in an isolated worktree, revalidated the packaged Hermes Skill + MCP integration against a disposable profile, corrected obsolete Hermes install documentation, and confirmed cleanup removes both managed entries. A real Hermes agent using disposable Codex OAuth invoked `refresh_projects`, `list_projects`, `read_project_progress`, and `update_project_progress`, then verified the updated Next Action through a second MCP read. Independent benchmark runs are still unrecorded.
+Executed the 11-task compaction plan subagent-driven (implementer + spec review + quality review per task), applied review fixes (data-loss gap in MCP fold ordering, non-UTF-8 corruption, open-task syntaxes, BOM order, stop summary ordering, compact-prompt churn), rebuilt dist.
+
 
 ## Next Action
 
-Decide the next release/versioning scope, then run independent benchmark sessions for scenarios 01 through 03 and record only uncontaminated transcripts/results if benchmark evidence is included.
+Task 12: clean up `D:/depot/agenticwars-game-backup/project-progress` per the spec's agenticwars section, after updating the installed plugin to v0.6.0, with the owner's approval before each write (checkpoint commit, `compact --write`, hand-pass edits).
+
 
 ## Remaining Work
 
+- [x] Agree the last-runtime memo: one line, optional frontmatter, written when progress is updated.
+- [x] Write `docs/superpowers/specs/2026-10-06-last-runtime-memo-design.md`.
+- [x] User accepted the reviewed spec and said to proceed.
+- [x] Write `docs/superpowers/plans/2026-10-06-last-runtime-memo.md`.
+- [x] Implement and release the last-runtime memo (`v0.5.0`).
+- [x] Write `docs/superpowers/specs/2026-10-20-progress-compaction-design.md`.
+- [ ] User reviews the compaction spec; then write and execute its plan.
+- [ ] Run the one-time agenticwars `project-progress/` cleanup after the compaction release.
 - [x] Verify current Codex plugin, hooks, env, and MCP config compatibility against official OpenAI docs.
 - [x] Add hook output for uninitialized projects that instructs the agent to ask before initializing multi-step tracking.
 - [x] Add per-project opt-in/opt-out/initialized state outside the project.
@@ -144,11 +144,8 @@ Decide the next release/versioning scope, then run independent benchmark session
 
 ## Blockers
 
-None for the v0.4.2 fix, publication, or benchmark work. The packaged Hermes CLI/MCP lifecycle and model-backed agent smoke both pass; the agent verified a `Next Action` update through a second MCP read in a disposable Codex OAuth profile.
+None. On this Windows host node_modules has only Linux native bindings, so tests/typecheck/build run in WSL.
 
-Two notes on state outside this repository. The global index at `~/.awesome-progress-tracker/projects.json` was refreshed: 51 entries down to 9, pruning the dead worktree entry that made `progress-tracker` ambiguous along with 41 other entries whose `Progress.md` no longer existed. This repository still will not appear in that index until `PROJECT_PROGRESS_ROOTS` includes `D:/depot`; that is configuration, not a defect.
-
-`docs/adr/0001` through `0014`, `docs/demo-use-cases.md`, `docs/glossary.md`, `misc/`, and `.hermes/` remain untracked. They predate this work and were left alone rather than swept into the merge.
 
 ## Deployment
 
