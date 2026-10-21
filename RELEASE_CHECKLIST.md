@@ -4,10 +4,11 @@
 
 - [x] Both plugin and marketplace manifests identify `breadcrumbs`; install selector `breadcrumbs@breadcrumbs`.
 - [x] Bundled skill, Hermes components, MCP keys/handshake, and all current install commands use `breadcrumbs`.
-- [ ] `hermes skills list --source hub`, `hermes mcp list`, and `hermes mcp test breadcrumbs` pass.
-- [ ] Old uninstall/new install succeeds in disposable Claude/Codex/Hermes profiles with project data and unrelated configuration retained.
+- [x] `hermes skills list --source hub`, `hermes mcp list`, and `hermes mcp test breadcrumbs` pass.
+- [x] Native Claude/Codex old uninstall/new install passes. Hermes legacy guard/uninstall regressions and live v0.8 install/status/doctor/read-update-readback/opt-out/uninstall pass with data/state retained.
 - [x] Full Linux/Windows tests, typecheck/build and packed runtime checks pass.
-- [ ] v0.8.0 merged/tagged/pushed, GitHub release public, npm package published and registry install verified.
+- [x] v0.8.0 merged/tagged/pushed and GitHub release public with the tested tarball attached.
+- [ ] npm package published and registry install verified (registry requires owner2FA).
 
 ## Breadcrumbs v0.7.0 candidate (superseded; historical verification)
 
@@ -118,3 +119,10 @@ The checked items below are historical evidence, not verification of the Breadcr
 - Canonical manifests/package/lockfile versions all0.8.0; plugin+marketplace+skill+MCP identities all breadcrumbs. Native disposable Claude/Codex profiles uninstalled project-progress@awesome-progress-tracker, removed its marketplace and installed breadcrumbs@breadcrumbs0.8.0 from the candidate.
 - Packed scoped artifact passes all three aliases/npm exec/init/compact/shared state/Claude+Codex lifecycle/MCP breadcrumbs0.8.0, plus safe legacy-bin collision upgrade without --force. Old marker/server-key/skill-path cleanup and legacy status/doctor checks have regression tests.
 - Independent code review found two legacy status-reporting gaps; both fixed and regression-verified, including Hermes connectivity against the detected legacy server name. No review blockers remain. Tagged remote install checks and publication follow next.
+
+### v0.8.0 remote release verification, 2026-10-21
+
+- Main/tag release commitd4d0613. Public latest GitHub release: https://github.com/AndriiLavrekha/breadcrumbs/releases/tag/v0.8.0.
+- Fresh remote Claude and Codex installs list exactly breadcrumbs@breadcrumbs version0.8.0, marketplace breadcrumbs, and MCP key breadcrumbs. Installed MCP servers report breadcrumbs0.8.0, list six tools and read existing progress; installed resume hooks inject Breadcrumbs context.
+- Real Hermes installed skill breadcrumbs from v0.8.0/skills/breadcrumbs/SKILL.md and server breadcrumbs via the GitHub package. Status/doctor/connectivity and six-tool discovery pass. Deterministic read/update/readback through its generated configuration passes. Opt-out and managed uninstall preserve project data and state.
+- npm web2FA upload for0.8.0 is awaiting owner browser approval. GitHub-native installation is available independently; no npm publication is claimed until public registry verification passes. Superseded v0.7 remains an unpublished historical draft.

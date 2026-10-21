@@ -15,7 +15,11 @@ User request: replace the retained `project-progress@awesome-progress-tracker` i
 ## Execution
 
 - [x] Inventory manifest, skill, CLI, MCP, doc and test ownership; add canonical identity expectations and observe them fail.
-- [ ] Rename current component identities, add bounded legacy cleanup at existing installer helpers, update active install/upgrade instructions and release notes.
-- [ ] Run focused/full tests, typecheck/build, inspect the packed artifact, and verify old uninstall/new install plus runtime MCP/hooks in disposable Claude/Codex/Hermes profiles.
+- [x] Rename current component identities, add bounded legacy cleanup at existing installer helpers, update active install/upgrade instructions and release notes.
+- [x] Run focused/full tests, typecheck/build, inspect the packed artifact, and verify old uninstall/new install plus runtime MCP/hooks in disposable Claude/Codex/Hermes profiles.
 - [ ] Commit, review, merge, tag/push `v0.8.0`; publish the GitHub release and npm package; verify the public install route. npm requires owner2FA, with a fresh browser approval if needed.
 - [ ] Record actual verification/release results in canonical progress and Obsidian. No credentials or auth URLs belong in those files.
+
+## Release checkpoint
+
+User confirmed canonical spelling breadcrumbs. v0.8.0 is merged and publicly released on GitHub atd4d0613. Native old-uninstall/new-install and fresh remote breadcrumbs@breadcrumbs installs, runtime MCP/hooks and live Hermes checks pass. Linux405/405; Windows404+1POSIXskip; typecheck/build/packed runtime pass. Independent review has no blockers after legacy status/doctor fixes. npm publication remains gated only on the registry's owner2FA confirmation; no secrets are stored in project files.
