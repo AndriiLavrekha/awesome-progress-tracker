@@ -16,7 +16,7 @@ Project-local Markdown that survives context resets — so your agent picks up e
 
 </div>
 
-> **Release candidate:** Breadcrumbs v0.7.0 has not been published. The npm commands and renamed GitHub URLs below become available after rollout; use the local package instructions in [Verification](#verification) until then. The unscoped npm package `breadcrumbs` belongs to an unrelated project.
+> The npm package is **`@andriilavrekha/breadcrumbs`**. The unscoped package `breadcrumbs` belongs to an unrelated project.
 
 ---
 
@@ -178,10 +178,10 @@ After install or update, restart Hermes so it reloads the managed skill and MCP 
 ## Initialize A Project
 
 ```bash
-# from npm after publication
+# from npm
 npx --package=@andriilavrekha/breadcrumbs breadcrumbs init /path/to/repo --project "My Project"
 
-# from GitHub after the repository rename
+# from GitHub
 npx --package=github:AndriiLavrekha/breadcrumbs breadcrumbs init /path/to/repo --project "My Project"
 
 # or installed globally
@@ -203,7 +203,7 @@ When switching a global install to a new npm package identity, first check which
 npm ls -g --depth=0
 ```
 
-If it is `awesome-progress-tracker`, remove only that npm package before installing Breadcrumbs. It owns the legacy command names, so installing a second package with those aliases can otherwise fail with `EEXIST`. After npm publication, the upgrade is:
+If it is `awesome-progress-tracker`, remove only that npm package before installing Breadcrumbs. It owns the legacy command names, so installing a second package with those aliases can otherwise fail with `EEXIST`. Upgrade with:
 
 ```bash
 npm uninstall -g awesome-progress-tracker

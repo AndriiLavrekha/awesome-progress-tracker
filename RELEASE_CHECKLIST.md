@@ -8,7 +8,7 @@
 - [x] Global npm upgrade is verified in an isolated prefix without `--force` or data migration.
 - [x] Full tests, typecheck, build and packed MCP handshake pass; package and manifest versions agree.
 - [x] Review remaining old names as compatibility identifiers or historical references.
-- [ ] Authorize the concrete candidate before repository rename, push/tag or publication.
+- [x] User authorized merge, repository rename, release publication and remaining testing on 2026-10-21.
 - [ ] After tagging, verify real Hermes, raw skill URL, GitHub install and existing plugin update routes.
 - [ ] Publish and verify the scoped package; bridge/deprecate an old npm package only if owned.
 - [ ] Publish `Breadcrumbs v0.7.0` on GitHub and remove the README release-candidate notice.
@@ -21,7 +21,7 @@
 - Packed Claude/Codex install twice, status, doctor and uninstall passed with disposable homes. Unrelated MCP configuration, project progress and opt-out state survived. Unit tests separately seed the legacy managed markers and installed skill path.
 - Packed stdio MCP initialization advertised `project-progress` / `0.7.0` and listed the expected tools from a working directory outside the checkout.
 - A local fixture with the old package identity and two legacy bins reproduced npm `EEXIST` against the actual scoped tarball. Package-specific uninstall followed by scoped install passed without `--force`; data/configuration/state survived. This checks bin ownership, not a public legacy npm publication.
-- Windows Node `24.14.0`: `node dist/src/cli.js help` passed. Full Windows Vitest and Windows symlink privileges were not checked; native test dependencies in this checkout are Linux bindings.
+- Windows Node `24.14.0`: a clean isolated checkout with `npm ci --no-audit --no-fund` passes **402 tests, 1 POSIX-only symlink test skipped**. Windows typecheck and build pass. The main checkout keeps its Linux native dependencies unchanged.
 - Independent code review: no blocking issues after documentation corrections. `git diff --check` passed.
 - Authenticated registry reads return 404 for both package identities; neither public npm publication was found. GitHub admin access is confirmed and the target repository URL currently returns 404. No rename, push, tag, publication or live provider update has occurred.
 
@@ -87,3 +87,9 @@ The checked items below are historical evidence, not verification of the Breadcr
 - [x] Adapter output uses the shared `hookSpecificOutput` / `systemMessage` shape Codex and Claude Code both accept.
 - [x] Installs cleanly via `codex plugin marketplace add` + `codex plugin add project-progress@<marketplace>`.
 - [ ] Plugin hooks are trusted on first run (Codex prompts; document that users approve once).
+
+### Release rollout started, 2026-10-21
+
+- User explicitly authorized the merge, rename and publication. Origin/main was up to date and the candidate was one commit ahead.
+- Fresh full WSL suite: 403/403 passed; typecheck/build passed. Fresh clean Windows suite: 402 passed/1 POSIX-only skip; typecheck/build passed.
+- Disposable Claude Code 2.1.306 and Codex CLI 0.163.0 profiles installed v0.6.0 from the old GitHub URL before rename, establishing the upgrade baseline. Real Hermes 0.19.1 is available for tagged-route checks.
