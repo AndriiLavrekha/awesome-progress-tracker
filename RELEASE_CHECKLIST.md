@@ -9,7 +9,7 @@
 - [x] Full tests, typecheck, build and packed MCP handshake pass; package and manifest versions agree.
 - [x] Review remaining old names as compatibility identifiers or historical references.
 - [x] User authorized merge, repository rename, release publication and remaining testing on 2026-10-21.
-- [ ] After tagging, verify real Hermes, raw skill URL, GitHub install and existing plugin update routes.
+- [x] After tagging, verified real Hermes, raw skill URL, tagged GitHub install and existing plugin update routes.
 - [ ] Publish and verify the scoped package; bridge/deprecate an old npm package only if owned.
 - [ ] Publish `Breadcrumbs v0.7.0` on GitHub and remove the README release-candidate notice.
 
@@ -93,3 +93,12 @@ The checked items below are historical evidence, not verification of the Breadcr
 - User explicitly authorized the merge, rename and publication. Origin/main was up to date and the candidate was one commit ahead.
 - Fresh full WSL suite: 403/403 passed; typecheck/build passed. Fresh clean Windows suite: 402 passed/1 POSIX-only skip; typecheck/build passed.
 - Disposable Claude Code 2.1.306 and Codex CLI 0.163.0 profiles installed v0.6.0 from the old GitHub URL before rename, establishing the upgrade baseline. Real Hermes 0.19.1 is available for tagged-route checks.
+
+### Live tagged-route verification, 2026-10-21
+
+- Main fast-forwarded to4aed743; existing repository renamed in place to AndriiLavrekha/breadcrumbs; origin updated; annotated tag v0.7.0 pushed. Old repository and v0.6.0 release URLs redirect with HTTP200, old Git remote still resolves, and the immutable raw v0.7.0 skill URL returns HTTP200.
+- Disposable Claude Code2.1.306 and Codex0.163.0 profiles upgraded installed0.6.0 plugins to0.7.0 through the old marketplace source URL. Both also installed fresh0.7.0 plugins from the new URL. Stable plugin/marketplace IDs stayed unchanged.
+- Real installed plugin MCP servers advertise0.7.0, list six tools and read progress successfully; both installed SessionStart adapters inject Breadcrumbs resume context. Claude details reports the skill/init command, all four hook events and one MCP server.
+- Hermes0.19.1 installed the tagged raw skill and GitHub npx MCP server, passed status/doctor/connectivity, discovered six tools, and performed read/update/readback through its generated MCP configuration. Opt-out suppresses initialization guidance. Managed uninstall preserves project data and opt-out state.
+- The exact tagged GitHub npx command prints Breadcrumbs help. A GitHub draft release has the verified tarball attached; asset SHA256 is88ccd17eeec4c6c30534e7d0eb3bb14a9b48a13ba8d4db23de837374daf41dba.
+- Public npm publication is awaiting the registry-required browser2FA confirmation. No credentials or auth URLs are recorded here. The npm CLI browser prompt was suppressed by noninteractive tool streams, so the same standard npm-profile web-auth flow is being used explicitly; user browser approval remains required.
