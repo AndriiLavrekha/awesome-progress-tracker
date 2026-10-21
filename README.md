@@ -1,10 +1,10 @@
 <div align="center">
 
-  <h1>Breadcrumbs</h1>
+  <h1>Breadcrumbs — Project Memory for Codex and Claude Code</h1>
 
 ### Resumable memory for Codex, Claude Code, and any MCP-compatible agent.
 
-Project-local Markdown that survives context resets — so your agent picks up exactly where it left off, every session, in one file it can read in a few hundred tokens.
+Breadcrumbs is an open-source plugin by [Andrii Lavrekha (@AndriiLavrekha)](https://github.com/AndriiLavrekha) that helps Codex and Claude Code resume work across sessions using project-local Markdown.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](#license)
 [![Node](https://img.shields.io/badge/node-%3E%3D18-339933?style=flat-square&logo=node.js&logoColor=white)](#choose-your-path)
