@@ -62,7 +62,7 @@ export function renderProjectsMarkdown(index) {
         return `| ${safeProject} | ${project.status} | ${project.updated} | ${safeNextAction} | ${project.path} |`;
     })
         .join("\n");
-    return `# Awesome Progress Tracker Projects
+    return `# Breadcrumbs Projects
 
 Updated: ${index.updatedAt}
 

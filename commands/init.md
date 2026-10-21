@@ -1,9 +1,9 @@
 ---
-description: Initialize Awesome Progress Tracker (project-progress/) in the current project
+description: Initialize Breadcrumbs (project-progress/) in the current project
 argument-hint: [project name]
 ---
 
-Initialize Awesome Progress Tracker for the current project.
+Initialize Breadcrumbs for the current project.
 
 Use the `project-progress` skill. Steps:
 

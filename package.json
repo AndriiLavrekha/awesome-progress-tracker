@@ -1,11 +1,20 @@
 {
-  "name": "awesome-progress-tracker",
-  "version": "0.6.0",
-  "description": "Project-local Markdown progress tracking for Codex, Claude Code, and MCP-compatible tools.",
+  "name": "@andriilavrekha/breadcrumbs",
+  "version": "0.7.0",
+  "description": "Breadcrumbs: resumable project-local Markdown memory for coding agents.",
+  "homepage": "https://github.com/AndriiLavrekha/breadcrumbs",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AndriiLavrekha/breadcrumbs.git"
+  },
+  "bugs": {
+    "url": "https://github.com/AndriiLavrekha/breadcrumbs/issues"
+  },
   "license": "MIT",
   "private": false,
   "type": "module",
   "bin": {
+    "breadcrumbs": "dist/src/cli.js",
     "awesome-progress-tracker": "dist/src/cli.js",
     "project-progress": "dist/src/cli.js"
   },

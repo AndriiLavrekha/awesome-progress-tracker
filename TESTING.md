@@ -1,4 +1,4 @@
-# Awesome Progress Tracker Test Plan
+# Breadcrumbs Test Plan
 
 Validate a real install with Claude Code and Codex. Use temporary projects first, then repeat the important scenarios on one real project.
 
@@ -6,12 +6,12 @@ Validate a real install with Claude Code and Codex. Use temporary projects first
 
 ```bash
 # Claude Code
-npx github:AndriiLavrekha/awesome-progress-tracker install --verify
-npx github:AndriiLavrekha/awesome-progress-tracker doctor
+npx --package=github:AndriiLavrekha/breadcrumbs breadcrumbs install --verify
+npx --package=github:AndriiLavrekha/breadcrumbs breadcrumbs doctor
 
 # Codex
-npx github:AndriiLavrekha/awesome-progress-tracker install -g codex --verify
-npx github:AndriiLavrekha/awesome-progress-tracker doctor -g codex
+npx --package=github:AndriiLavrekha/breadcrumbs breadcrumbs install -g codex --verify
+npx --package=github:AndriiLavrekha/breadcrumbs breadcrumbs doctor -g codex
 ```
 
 For native Codex plugin testing, also check `codex plugin list`, then start a new Codex session and trust the bundled `project-progress` hooks in `/hooks` if marked untrusted.
@@ -30,12 +30,12 @@ Expected: `doctor_ok: true`, bootstrap instructions installed, MCP config instal
 ## Scenario 1A: Opted-Out Project Stays Quiet
 
 1. Pick/create a project without `project-progress/`.
-2. `npx github:AndriiLavrekha/awesome-progress-tracker state set /path/to/repo --state opted-out`
+2. `npx --package=github:AndriiLavrekha/breadcrumbs breadcrumbs state set /path/to/repo --state opted-out`
 3. New Codex session in that repo, ask a normal multi-step request.
 
 **Expected:** `SessionStart` injects no initialization guidance; agent doesn't re-ask unless you invoke the skill or reset state; `project-progress/` stays absent.
 
-Reset after: `npx github:AndriiLavrekha/awesome-progress-tracker state reset /path/to/repo`
+Reset after: `npx --package=github:AndriiLavrekha/breadcrumbs breadcrumbs state reset /path/to/repo`
 
 ## Scenario 2: Existing Project Without Progress Tracker
 
@@ -58,10 +58,10 @@ Reset after: `npx github:AndriiLavrekha/awesome-progress-tracker state reset /pa
 ## Scenario 4: MCP Project Index
 
 ```bash
-npx github:AndriiLavrekha/awesome-progress-tracker install-mcp --roots "C:/path/to/projects"
+npx --package=github:AndriiLavrekha/breadcrumbs breadcrumbs install-mcp --roots "C:/path/to/projects"
 ```
 
-Ask the agent: `Use the Awesome Progress Tracker MCP tools to refresh projects, then list active and blocked projects.`
+Ask the agent: `Use the Breadcrumbs MCP tools to refresh projects, then list active and blocked projects.`
 
 **Expected:** `refresh_projects` updates `~/.awesome-progress-tracker/projects.json` and `Projects.md`; `list_projects`/`list_active_projects`/`list_blocked_projects` return compact summaries; individual reads still reflect the real `Progress.md`.
 
@@ -69,7 +69,7 @@ Ask the agent: `Use the Awesome Progress Tracker MCP tools to refresh projects, 
 
 ## Scenario 5: Progress Update Through MCP
 
-Ask: `Use Awesome Progress Tracker MCP to update the Next Action for project <project name> to "Manual MCP update test".`
+Ask: `Use Breadcrumbs MCP to update the Next Action for project <project name> to "Manual MCP update test".`
 
 **Expected:** the matching project's `Progress.md` and the global index both update; no unrelated project changes.
 
@@ -101,7 +101,7 @@ After `npm run build`, run the adapter directly with JSON input:
 '{"cwd":"C:/path/to/uninitialized-repo","session_id":"smoke-uninitialized","source":"startup"}' | node dist/src/hook/cc-adapter.js session-start
 
 # Opted-out repo — expect no stdout
-npx github:AndriiLavrekha/awesome-progress-tracker state set C:/path/to/uninitialized-repo --state opted-out
+npx --package=github:AndriiLavrekha/breadcrumbs breadcrumbs state set C:/path/to/uninitialized-repo --state opted-out
 '{"cwd":"C:/path/to/uninitialized-repo","session_id":"smoke-optout","source":"startup"}' | node dist/src/hook/cc-adapter.js session-start
 ```
 
@@ -122,12 +122,12 @@ Ask the agent to do a small task.
 
 ```bash
 # Claude Code
-npx github:AndriiLavrekha/awesome-progress-tracker uninstall
-npx github:AndriiLavrekha/awesome-progress-tracker status
+npx --package=github:AndriiLavrekha/breadcrumbs breadcrumbs uninstall
+npx --package=github:AndriiLavrekha/breadcrumbs breadcrumbs status
 
 # Codex
-npx github:AndriiLavrekha/awesome-progress-tracker uninstall -g codex
-npx github:AndriiLavrekha/awesome-progress-tracker status -g codex
+npx --package=github:AndriiLavrekha/breadcrumbs breadcrumbs uninstall -g codex
+npx --package=github:AndriiLavrekha/breadcrumbs breadcrumbs status -g codex
 ```
 
 **Expected:** managed bootstrap block and MCP config removed; Codex skill removed (Codex uninstall); project-local `project-progress/` folders untouched.
@@ -142,18 +142,18 @@ Use a temporary `HERMES_HOME` so the test never touches your real Hermes profile
 PACKAGE_TGZ="$(npm pack --silent)"
 export HERMES_HOME="$(mktemp -d)"
 
-npx --yes --package="$PACKAGE_TGZ" awesome-progress-tracker install -g hermes --roots "C:/path/to/projects"
+npx --yes --package="$PACKAGE_TGZ" breadcrumbs install -g hermes --roots "C:/path/to/projects"
 
 hermes skills list --source hub
 hermes mcp list
 hermes mcp test awesome-progress-tracker
-npx --yes --package="$PACKAGE_TGZ" awesome-progress-tracker doctor -g hermes
+npx --yes --package="$PACKAGE_TGZ" breadcrumbs doctor -g hermes
 
 # Start Hermes against a temp initialized project and smoke the agent-facing tool flow:
 # list projects, read project progress, update the Next Action.
 
-npx --yes --package="$PACKAGE_TGZ" awesome-progress-tracker state set /path/to/repo --state opted-out
-npx --yes --package="$PACKAGE_TGZ" awesome-progress-tracker uninstall -g hermes
+npx --yes --package="$PACKAGE_TGZ" breadcrumbs state set /path/to/repo --state opted-out
+npx --yes --package="$PACKAGE_TGZ" breadcrumbs uninstall -g hermes
 ```
 
 **Expected:** the temp `HERMES_HOME` holds all managed state, real profile untouched. `hermes skills list --source hub` shows `project-progress`; `hermes mcp list` shows `awesome-progress-tracker`; `hermes mcp test awesome-progress-tracker` passes. The Hermes agent can list/read/update projects through the MCP tools. Opt-out suppresses future prompts for that repo. `uninstall -g hermes` cleanly removes the managed skill and MCP server.
@@ -168,15 +168,15 @@ $hermesHome = Join-Path ([System.IO.Path]::GetTempPath()) ("apt-hermes-" + [guid
 New-Item -ItemType Directory -Path $hermesHome | Out-Null
 $env:HERMES_HOME = $hermesHome
 
-npx --yes --package="$packageTgz" awesome-progress-tracker install -g hermes --roots "C:/path/to/projects"
+npx --yes --package="$packageTgz" breadcrumbs install -g hermes --roots "C:/path/to/projects"
 hermes skills list --source hub
 hermes mcp list
 hermes mcp test awesome-progress-tracker
-npx --yes --package="$packageTgz" awesome-progress-tracker doctor -g hermes
+npx --yes --package="$packageTgz" breadcrumbs doctor -g hermes
 
 # Run the initialized-project agent smoke and disposable-repo opt-out checks described above.
-npx --yes --package="$packageTgz" awesome-progress-tracker state set C:/path/to/disposable-repo --state opted-out
-npx --yes --package="$packageTgz" awesome-progress-tracker uninstall -g hermes
+npx --yes --package="$packageTgz" breadcrumbs state set C:/path/to/disposable-repo --state opted-out
+npx --yes --package="$packageTgz" breadcrumbs uninstall -g hermes
 
 Remove-Item Env:HERMES_HOME
 Write-Host "Disposable Hermes profile remains at $hermesHome for inspection or manual cleanup."

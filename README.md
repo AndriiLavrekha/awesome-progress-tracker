@@ -1,6 +1,6 @@
 <div align="center">
 
-  <img src="misc/apt-logo.png" alt="Awesome Progress Tracker logo">
+  <h1>Breadcrumbs</h1>
 
 ### Resumable memory for Codex, Claude Code, and any MCP-compatible agent.
 
@@ -10,11 +10,13 @@ Project-local Markdown that survives context resets — so your agent picks up e
 [![Node](https://img.shields.io/badge/node-%3E%3D18-339933?style=flat-square&logo=node.js&logoColor=white)](#choose-your-path)
 [![TypeScript](https://img.shields.io/badge/-typescript-3178C6?style=flat-square&logo=typescript&logoColor=white)](#mcp-server)
 [![Plugins](https://img.shields.io/badge/plugins-Claude%20Code%20%C2%B7%20Codex-8A2BE2?style=flat-square)](#choose-your-path)
-[![Version](https://img.shields.io/badge/version-0.6.0-informational?style=flat-square)](https://github.com/AndriiLavrekha/awesome-progress-tracker/releases/tag/v0.6.0)
+[![Version](https://img.shields.io/badge/version-0.7.0-informational?style=flat-square)](https://github.com/AndriiLavrekha/breadcrumbs/releases/tag/v0.7.0)
 
 [Why](#why) · [Features](#features) · [Quick Start](#choose-your-path) · [MCP Tools](#mcp-server) · [Troubleshooting](#troubleshooting-codex)
 
 </div>
+
+> **Release candidate:** Breadcrumbs v0.7.0 has not been published. The npm commands and renamed GitHub URLs below become available after rollout; use the local package instructions in [Verification](#verification) until then. The unscoped npm package `breadcrumbs` belongs to an unrelated project.
 
 ---
 
@@ -22,7 +24,7 @@ Project-local Markdown that survives context resets — so your agent picks up e
 
 Agent sessions end. Context windows reset. New sessions start cold, burning the first few minutes re-deriving "what was I doing?"
 
-Awesome Progress Tracker fixes that with one convention: every project keeps a `project-progress/Progress.md` file as its **resume source of truth**. A `SessionStart` hook injects the compact bits — Resume Snapshot, Next Action, Blockers — into the agent's context automatically. No dashboards, no databases. Just a Markdown file the agent reads at kickoff and updates before it stops.
+Breadcrumbs fixes that with one convention: every project keeps a `project-progress/Progress.md` file as its **resume source of truth**. A `SessionStart` hook injects the compact bits — Resume Snapshot, Next Action, Blockers — into the agent's context automatically. No dashboards, no databases. Just a Markdown file the agent reads at kickoff and updates before it stops.
 
 ```text
 session 1 ──work──► Progress.md updated (Resume Snapshot · Next Action · Blockers)
@@ -53,21 +55,21 @@ new session ◄── SessionStart hook injects the snapshot, no lookup needed �
 
 > Requires Node.js >= 18. Hooks and MCP server run entirely on Node — no Python needed.
 
-After installing a plugin, start a new agent session. Run `awesome-progress-tracker doctor -g codex` (or `--json` for scripting) to check setup.
+After installing a plugin, start a new agent session. Run `breadcrumbs doctor -g codex` (or `--json` for scripting) to check setup.
 
 ## Install As A Claude Code Plugin (recommended)
 
 Zero-config: one marketplace add + install wires the skill, MCP server, and lifecycle hooks — no edits to `CLAUDE.md` or `~/.claude.json`.
 
 ```text
-/plugin marketplace add AndriiLavrekha/awesome-progress-tracker
+/plugin marketplace add AndriiLavrekha/breadcrumbs
 /plugin install project-progress@awesome-progress-tracker
 ```
 
 Or from the CLI:
 
 ```bash
-claude plugin marketplace add AndriiLavrekha/awesome-progress-tracker
+claude plugin marketplace add AndriiLavrekha/breadcrumbs
 claude plugin install project-progress@awesome-progress-tracker
 ```
 
@@ -91,7 +93,7 @@ To scope the MCP index to specific roots, set `PROJECT_PROGRESS_ROOTS` (semicolo
 The same repo is also a Codex plugin — installs through the native flow, no manual `config.toml` editing:
 
 ```bash
-codex plugin marketplace add AndriiLavrekha/awesome-progress-tracker
+codex plugin marketplace add AndriiLavrekha/breadcrumbs
 codex plugin add project-progress@awesome-progress-tracker
 ```
 
@@ -128,14 +130,14 @@ Restart Claude Code so the plugin's skills, MCP server, and hooks reload.
 On an initialized project, `SessionStart` injects resume context from `Progress.md`. On an uninitialized project, the agent asks before creating `project-progress/`:
 
 ```text
-This project is not initialized with Awesome Progress Tracker. Do you want me to create `project-progress/` here?
+This project is not initialized with Breadcrumbs. Do you want me to create `project-progress/` here?
 ```
 
-- **Yes** → run `awesome-progress-tracker init . --project "<name>"`
+- **Yes** → run `breadcrumbs init . --project "<name>"`
 - **No** → record an opt-out so future sessions stay quiet:
 
 ```bash
-awesome-progress-tracker state set . --state opted-out
+breadcrumbs state set . --state opted-out
 ```
 
 The opt-out lives outside the repo, under the tool's user data directory — it never dirties the project.
@@ -155,7 +157,7 @@ hermes --version
 Wire the integration:
 
 ```bash
-npx github:AndriiLavrekha/awesome-progress-tracker install -g hermes
+npx --package=github:AndriiLavrekha/breadcrumbs breadcrumbs install -g hermes
 ```
 
 | Piece | What it does |
@@ -169,25 +171,47 @@ Named collisions stop the install before any changes are made. If Hermes already
 
 After install or update, restart Hermes so it reloads the managed skill and MCP registry. Because lifecycle hooks are deferred for Hermes, drive things manually for now:
 
-- initialize with `awesome-progress-tracker init . --project "<name>"` when the user opts in
-- check setup with `awesome-progress-tracker status -g hermes` / `doctor -g hermes`
+- initialize with `breadcrumbs init . --project "<name>"` when the user opts in
+- check setup with `breadcrumbs status -g hermes` / `doctor -g hermes`
 - verify directly with `hermes skills list --source hub`, `hermes mcp list`, `hermes mcp test awesome-progress-tracker`
 
 ## Initialize A Project
 
 ```bash
-# after npm publication
-npx awesome-progress-tracker init /path/to/repo --project "My Project"
+# from npm after publication
+npx --package=@andriilavrekha/breadcrumbs breadcrumbs init /path/to/repo --project "My Project"
 
-# from the private GitHub repo
-npx github:AndriiLavrekha/awesome-progress-tracker init /path/to/repo --project "My Project"
+# from GitHub after the repository rename
+npx --package=github:AndriiLavrekha/breadcrumbs breadcrumbs init /path/to/repo --project "My Project"
 
 # or installed globally
-npm install -g github:AndriiLavrekha/awesome-progress-tracker
-project-progress init /path/to/repo --project "My Project"
+npm install -g @andriilavrekha/breadcrumbs
+breadcrumbs init /path/to/repo --project "My Project"
 ```
 
 `init` creates `project-progress/` from `templates/project-progress/`. Fill in the frontmatter and keep `Resume Snapshot`, `Next Action`, `Remaining Work`, and `Blockers` compact enough for an agent to load first.
+
+## Upgrading From Awesome Progress Tracker
+
+Breadcrumbs is the new name for Awesome Progress Tracker. The primary command is `breadcrumbs`; `awesome-progress-tracker` and `project-progress` remain aliases for the same commands and data.
+
+Your `project-progress/` files, `~/.awesome-progress-tracker` state and index, `PROJECT_PROGRESS_ROOTS`, and `AWESOME_PROGRESS_TRACKER_HOME` stay in place. The plugin and skill ID remains `project-progress`, the marketplace ID remains `awesome-progress-tracker`, and existing MCP server keys remain unchanged. This is why plugin commands still use `project-progress@awesome-progress-tracker`. There is no project-data migration.
+
+When switching a global install to a new npm package identity, first check which package owns the old commands:
+
+```bash
+npm ls -g --depth=0
+```
+
+If it is `awesome-progress-tracker`, remove only that npm package before installing Breadcrumbs. It owns the legacy command names, so installing a second package with those aliases can otherwise fail with `EEXIST`. After npm publication, the upgrade is:
+
+```bash
+npm uninstall -g awesome-progress-tracker
+npm install -g @andriilavrekha/breadcrumbs
+breadcrumbs help
+```
+
+Do not use `--force` to overwrite another package's commands. npm package removal leaves your project files, provider configuration, and saved opt-out state intact; it is different from running the application's `uninstall` command. Package-name changes do not update existing npm installations automatically. Use `@andriilavrekha/breadcrumbs`; do not run `npm install breadcrumbs` or bare `npx breadcrumbs`.
 
 <details>
 <summary><strong>Agent Instructions — manual / CLI install path</strong></summary>
@@ -197,7 +221,7 @@ Install the global bootstrap for your agent (`claude` is the default; swap `-g c
 
 | Task | Command |
 | --- | --- |
-| Install | `npx github:AndriiLavrekha/awesome-progress-tracker install [-g codex]` |
+| Install | `npx --package=github:AndriiLavrekha/breadcrumbs breadcrumbs install [-g codex]` |
 | Install + verify | `... install [-g codex] --verify` |
 | Install MCP config only | `... install-mcp [-g codex]` |
 | Install MCP config, project-local | `... install-mcp --local --roots "."` (writes `.mcp.json`) |
@@ -209,7 +233,7 @@ Install the global bootstrap for your agent (`claude` is the default; swap `-g c
 | Reset state | `... state reset /path/to/repo` |
 | Uninstall | `... uninstall [-g codex \| --local]` |
 
-Replace `...` with `npx github:AndriiLavrekha/awesome-progress-tracker`.
+Replace `...` with `npx --package=github:AndriiLavrekha/breadcrumbs breadcrumbs`.
 
 Manual instruction files are also available:
 
@@ -245,11 +269,11 @@ These wrappers run the compiled hook (`dist/src/hook/cli.js`) on Node — run `n
 Hooks report when progress files grow: session start shows a `Progress health:` line and the stop hook lists problems once per session. `compact` moves old history into `Archive.md` verbatim apart from heading levels:
 
 ```bash
-awesome-progress-tracker compact            # preview what moves
-awesome-progress-tracker compact --write    # apply
+breadcrumbs compact            # preview what moves
+breadcrumbs compact --write    # apply
 ```
 
-The directory argument is optional and defaults to the current directory. For plugin installs without the binary on PATH, use the exact `node "…/cli.js" compact "…"` command the hook message prints, or `npx github:AndriiLavrekha/awesome-progress-tracker compact`.
+The directory argument is optional and defaults to the current directory. For plugin installs without the binary on PATH, use the exact `node "…/cli.js" compact "…"` command the hook message prints, or `npx --package=github:AndriiLavrekha/breadcrumbs breadcrumbs compact`.
 
 It moves:
 
@@ -262,15 +286,16 @@ It also repairs garbled characters in all five progress files and refuses files 
 ## MCP Server
 
 ```bash
-npx awesome-progress-tracker mcp                                # after npm publication
-npx github:AndriiLavrekha/awesome-progress-tracker mcp           # from the private GitHub repo
+npx --package=@andriilavrekha/breadcrumbs breadcrumbs mcp
+# or from GitHub
+npx --package=github:AndriiLavrekha/breadcrumbs breadcrumbs mcp
 ```
 
 Configure discovery with a semicolon-separated `PROJECT_PROGRESS_ROOTS`:
 
 ```powershell
 $env:PROJECT_PROGRESS_ROOTS = "C:/Users/you/Documents;C:/Users/you/Projects"
-npx github:AndriiLavrekha/awesome-progress-tracker mcp
+npx --package=github:AndriiLavrekha/breadcrumbs breadcrumbs mcp
 ```
 
 For local development in this repo:
@@ -281,7 +306,7 @@ npm run build:mcp
 node dist/src/mcp/server.js
 ```
 
-MCP clients installed from npm/GitHub should use the package binary (`awesome-progress-tracker mcp` or `project-progress mcp`) to keep stdio clean.
+MCP clients installed from npm/GitHub should use the package binary (`breadcrumbs mcp` or `project-progress mcp`) to keep stdio clean.
 
 **Tool surface** — deliberately small; administrative state lives in the CLI (`state list/set/reset`), not here:
 
@@ -311,9 +336,8 @@ npm run build
 Verify package creation and npx-style execution locally:
 
 ```bash
-npm pack --dry-run
-npm pack
-npx --yes ./awesome-progress-tracker-0.1.0.tgz help
+PACKAGE_TGZ="$(npm pack --silent)"
+npx --yes --package="./$PACKAGE_TGZ" breadcrumbs help
 ```
 
 Run the lifecycle check against this repo:
@@ -336,9 +360,9 @@ Check in order:
 2. Hooks trusted: open `/hooks` in Codex and trust the `project-progress` hooks.
 3. Restarted Codex/Claude Code (or new session) after install or update.
 4. Project is actually uninitialized: `project-progress/Progress.md` is missing.
-5. Project isn't opted out: `awesome-progress-tracker state list`; reset with `state reset .`.
+5. Project isn't opted out: `breadcrumbs state list`; reset with `state reset .`.
 6. Task is non-trivial: hooks only nudge for multi-step feature/investigation/refactor/setup/debugging/deployment/release work.
-7. MCP is running: `/mcp` in Codex or `awesome-progress-tracker doctor -g codex`.
+7. MCP is running: `/mcp` in Codex or `breadcrumbs doctor -g codex`.
 
 The prompt-time hook covers work submitted after startup — if the project was created mid-session, submit the next prompt after trusting the updated hook.
 

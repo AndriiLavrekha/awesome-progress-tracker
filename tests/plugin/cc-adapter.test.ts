@@ -77,7 +77,7 @@ describe("cc-adapter session-start", () => {
       const payload = JSON.parse(result.stdout!);
       const context = payload.hookSpecificOutput.additionalContext;
       expect(payload.hookSpecificOutput.hookEventName).toBe("SessionStart");
-      expect(context).toContain("This project is not initialized with Awesome Progress Tracker");
+      expect(context).toContain("This project is not initialized with Breadcrumbs");
       expect(context).toContain("Do you want me to create `project-progress/` here?");
       expect(context).toContain("Do not ask for trivial one-off or read-only tasks");
       await expect(fs.access(path.join(dir, "project-progress"))).rejects.toThrow();

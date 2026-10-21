@@ -3,7 +3,7 @@ name: project-progress
 description: Maintain project-local Markdown progress state in project-progress/ for multi-step work, resumability, lifecycle checkpoints, and token-conscious agent handoff.
 ---
 
-# Project Progress
+# Breadcrumbs
 
 Use this skill for multi-step features, investigations, refactors, project setup, debugging, deployment, and release work. The goal is to preserve enough project state for a future agent or human to resume without rereading chat history.
 
@@ -17,9 +17,9 @@ Read `project-progress/Progress.md` first. Start with the frontmatter and `Resum
 
 1. Check whether `project-progress/Progress.md` exists.
 2. If it exists, read the frontmatter and `Resume Snapshot` before changing project files.
-3. If it is missing and the work is a multi-step feature, investigation, refactor, project setup, debugging session, deployment, or release, ask the user before initializing: `This project is not initialized with Awesome Progress Tracker. Do you want me to create project-progress/ here?`
-4. Only initialize from the templates after the user says yes. Use `awesome-progress-tracker init . --project "<project name>"` or `project-progress init . --project "<project name>"` when the CLI is available.
-5. If the user says no, record the per-project opt-out outside the project with `awesome-progress-tracker state set . --state opted-out` or `project-progress state set . --state opted-out`. Continue without creating progress files and do not ask again unless the user explicitly invokes this skill or changes the state.
+3. If it is missing and the work is a multi-step feature, investigation, refactor, project setup, debugging session, deployment, or release, ask the user before initializing: `This project is not initialized with Breadcrumbs. Do you want me to create project-progress/ here?`
+4. Only initialize from the templates after the user says yes. Use `breadcrumbs init . --project "<project name>"` or `project-progress init . --project "<project name>"` when the CLI is available.
+5. If the user says no, record the per-project opt-out outside the project with `breadcrumbs state set . --state opted-out` or `project-progress state set . --state opted-out`. Continue without creating progress files and do not ask again unless the user explicitly invokes this skill or changes the state.
 6. If kickoff changes the project state, update the progress files immediately.
 
 For a trivial one-off or read-only command, do not initialize progress files unless the user asks.

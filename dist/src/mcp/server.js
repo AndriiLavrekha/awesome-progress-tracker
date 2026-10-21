@@ -11,6 +11,7 @@ import path from "node:path";
 import { ALLOWED_PROGRESS_SECTIONS, MAX_LAST_MILESTONE_LENGTH, MAX_SECTION_CONTENT_LENGTH, appendToArchive, foldDoneSection, replaceFrontmatterValue, replaceSectionWithOperation, updateArchiveFile, writeFileAtomic, ProgressConflictError, validateLastMilestone, validateSectionContent, validateSectionName } from "./writer.js";
 import { listProjectTrackingStates, resetProjectTrackingState } from "../project-state.js";
 import { ALLOWED_GATE_VALUES, GATE_KEYS } from "../hook/schema.js";
+import { PACKAGE_VERSION } from "../package.js";
 const DEFAULT_EXCLUDES = DEFAULT_DISCOVERY_EXCLUDES;
 const PROJECT_STATUSES = ["idea", "active", "blocked", "paused", "done", "deployed", "archived"];
 const DEFAULT_MAX_PROJECTS = 50;
@@ -288,7 +289,7 @@ function textResult(text) {
     }
 }
 export function createServer() {
-    const server = new McpServer({ name: "project-progress", version: "0.1.1" });
+    const server = new McpServer({ name: "project-progress", version: PACKAGE_VERSION });
     server.registerTool("list_projects", {
         description: "List compact summaries from the cached project index. Filter by status when needed.",
         inputSchema: {

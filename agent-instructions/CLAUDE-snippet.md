@@ -1,6 +1,6 @@
-## Project Progress Memory
+## Breadcrumbs Memory
 
-When working in a repository on multi-step work, use `project-progress/Progress.md` as the first resume file. If it exists, read it before changing project files, starting with frontmatter and `Resume Snapshot`. If it is missing during meaningful multi-step work, ask the user before initializing Awesome Progress Tracker in the project. Only create `project-progress/` after the user says yes. If the user says no, record opt-out state with `awesome-progress-tracker state set . --state opted-out` when the CLI is available, then continue without creating project progress files.
+When working in a repository on multi-step work, use `project-progress/Progress.md` as the first resume file. If it exists, read it before changing project files, starting with frontmatter and `Resume Snapshot`. If it is missing during meaningful multi-step work, ask the user before initializing Breadcrumbs in the project. Only create `project-progress/` after the user says yes. If the user says no, record opt-out state with `breadcrumbs state set . --state opted-out` when the CLI is available, then continue without creating project progress files.
 
 Default read path: `project-progress/Progress.md` frontmatter, `Resume Snapshot`, `Next Action`, `Blockers`, and `Remaining Work`. Read `Tasks.md`, `Decisions.md`, `Open Questions.md`, and the latest `Session Log.md` entry only when needed.
 

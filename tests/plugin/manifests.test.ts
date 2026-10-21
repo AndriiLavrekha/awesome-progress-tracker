@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import os from "node:os";
+import { execFileSync } from "node:child_process";
 
 const root = process.cwd();
 
@@ -18,6 +20,26 @@ async function exists(rel: string): Promise<boolean> {
 }
 
 describe("plugin manifests", () => {
+  it.skipIf(process.platform === "win32")("runs the packaged CLI through npm-style executable symlinks", async () => {
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), "breadcrumbs-bin-"));
+    const executable = path.join(directory, "breadcrumbs");
+    try {
+      await fs.symlink(path.join(root, "dist/src/cli.js"), executable);
+      const output = execFileSync(process.execPath, [executable, "help"], { cwd: directory, encoding: "utf-8" });
+      expect(output).toMatch(/^Breadcrumbs\r?\n/);
+    } finally {
+      await fs.rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("exposes Breadcrumbs and legacy command aliases through one entry point", async () => {
+    const pkg = await readJson("package.json");
+    expect(pkg.name).toBe("@andriilavrekha/breadcrumbs");
+    expect(pkg.bin.breadcrumbs).toBe("dist/src/cli.js");
+    expect(pkg.bin["awesome-progress-tracker"]).toBe(pkg.bin.breadcrumbs);
+    expect(pkg.bin["project-progress"]).toBe(pkg.bin.breadcrumbs);
+  });
+
   it("declares a valid plugin.json", async () => {
     const plugin = await readJson(".claude-plugin/plugin.json");
     expect(plugin.name).toBe("project-progress");
@@ -119,6 +141,9 @@ describe("Codex plugin manifests", () => {
     expect(plugin.mcpServers).toBe("./.mcp.codex.json");
     expect(plugin.hooks).toBe("./hooks/hooks-codex.json");
     expect(plugin.interface.displayName.length).toBeGreaterThan(0);
+    expect(plugin.interface.displayName).toBe("Breadcrumbs");
+    expect(plugin.repository).toBe("https://github.com/AndriiLavrekha/breadcrumbs");
+    expect(claude.repository).toBe(plugin.repository);
     expect(await exists("hooks/hooks-codex.json")).toBe(true);
   });
 
@@ -134,6 +159,7 @@ describe("Codex plugin manifests", () => {
 
   it("exposes the plugin through a Codex (.agents) marketplace", async () => {
     const market = await readJson(".agents/plugins/marketplace.json");
+    expect(market.interface.displayName).toBe("Breadcrumbs");
     expect(Array.isArray(market.plugins)).toBe(true);
     const entry = market.plugins.find((p: any) => p.name === "project-progress");
     expect(entry).toBeDefined();

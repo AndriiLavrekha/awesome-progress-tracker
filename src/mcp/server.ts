@@ -28,6 +28,7 @@ import type { ProjectSummary } from "./schema.js";
 import { listProjectTrackingStates, resetProjectTrackingState } from "../project-state.js";
 import type { ProjectStateOptions } from "../project-state.js";
 import { ALLOWED_GATE_VALUES, GATE_KEYS } from "../hook/schema.js";
+import { PACKAGE_VERSION } from "../package.js";
 
 const DEFAULT_EXCLUDES = DEFAULT_DISCOVERY_EXCLUDES;
 const PROJECT_STATUSES = ["idea", "active", "blocked", "paused", "done", "deployed", "archived"] as const;
@@ -388,7 +389,7 @@ function textResult(text: string) {
 }
 
 export function createServer(): McpServer {
-  const server = new McpServer({ name: "project-progress", version: "0.1.1" });
+  const server = new McpServer({ name: "project-progress", version: PACKAGE_VERSION });
 
   server.registerTool(
     "list_projects",

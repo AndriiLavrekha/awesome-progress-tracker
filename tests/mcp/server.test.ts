@@ -2,11 +2,14 @@ import { describe, expect, it } from "vitest";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import {
   archiveFoldedItems,
   boundProjectSummaries,
   conflictPayload,
   compactProjectListItem,
+  createServer,
   errorResult,
   lastMilestoneSchema,
   projectSelectorSchema,
@@ -66,6 +69,21 @@ async function withIndex(
 }
 
 describe("MCP server tools", () => {
+  it("advertises the package version while preserving the protocol identity", async () => {
+    const pkg = JSON.parse(await fs.readFile("package.json", "utf-8"));
+    const server = createServer();
+    const client = new Client({ name: "rename-test", version: "1.0.0" });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+      expect(client.getServerVersion()).toEqual({ name: "project-progress", version: pkg.version });
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
   it("returns typed success and actionable error envelopes", () => {
     expect(successResult({ updated: true }, "Progress updated.")).toMatchObject({
       structuredContent: { updated: true },

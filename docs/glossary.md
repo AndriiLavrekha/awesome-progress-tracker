@@ -6,11 +6,11 @@ The Hermes configuration context selected by the current Hermes CLI environment.
 
 ## Hermes-native installation
 
-Direct use of Hermes management commands (`hermes skills install`, `hermes mcp add`) without the Awesome Progress Tracker package installer.
+Direct use of Hermes management commands (`hermes skills install`, `hermes mcp add`) without the Breadcrumbs package installer.
 
 ## Package-managed installation
 
-An Awesome Progress Tracker CLI command such as `awesome-progress-tracker install -g hermes` that delegates the work to Hermes management commands.
+A Breadcrumbs CLI command such as `breadcrumbs install -g hermes` that delegates the work to Hermes management commands.
 
 ## Project-progress skill
 
@@ -26,4 +26,4 @@ The one line naming the provider, agent, model, and effort of the session that l
 
 ## Tracker MCP server
 
-The Node stdio server started by `awesome-progress-tracker mcp`. In Hermes it's registered as `awesome-progress-tracker`; discovered tools are prefixed `mcp_awesome_progress_tracker_`.
+The Node stdio server started by `breadcrumbs mcp`. In Hermes it's registered as `awesome-progress-tracker`; discovered tools are prefixed `mcp_awesome_progress_tracker_`.

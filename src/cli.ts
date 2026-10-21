@@ -1,16 +1,16 @@
 #!/usr/bin/env node
-import { promises as fs } from "node:fs";
-import { existsSync, readFileSync } from "node:fs";
+import { promises as fs, realpathSync } from "node:fs";
 import { execFile, spawn } from "node:child_process";
 import path from "node:path";
 import { promisify } from "node:util";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { pathToFileURL } from "node:url";
 import { parseProjectSummary } from "./mcp/markdown.js";
 import { upsertIndexedProject } from "./mcp/index.js";
 import { main as runMcpServer } from "./mcp/server.js";
 import { sha256 } from "./hash.js";
 import { planCompaction, readProgressFiles, applyArchive } from "./compact.js";
 import { ProgressConflictError, updateArchiveFile, writeFileAtomic } from "./mcp/writer.js";
+import { PACKAGE_ROOT, PACKAGE_VERSION } from "./package.js";
 import {
   listProjectTrackingStates,
   resetProjectTrackingState,
@@ -18,32 +18,10 @@ import {
 } from "./project-state.js";
 import type { ProjectStateOptions, ProjectTrackingState, ProjectTrackingStateEntry } from "./project-state.js";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-function findPackageRoot(): string {
-  const candidates = [
-    path.resolve(__dirname, ".."),
-    path.resolve(__dirname, "..", ".."),
-    process.cwd()
-  ];
-
-  for (const candidate of candidates) {
-    if (existsSync(path.join(candidate, "templates", "project-progress"))) {
-      return candidate;
-    }
-  }
-
-  return path.resolve(__dirname, "..", "..");
-}
-
-const PACKAGE_ROOT = findPackageRoot();
 const execFileAsync = promisify(execFile);
 const TEMPLATE_DIR = path.join(PACKAGE_ROOT, "templates", "project-progress");
 const MCP_SERVER_NAME = "awesome-progress-tracker";
-const PACKAGE_SPEC = "github:AndriiLavrekha/awesome-progress-tracker";
-const PACKAGE_VERSION = (
-  JSON.parse(readFileSync(path.join(PACKAGE_ROOT, "package.json"), "utf-8")) as { version: string }
-).version;
+const PACKAGE_SPEC = "github:AndriiLavrekha/breadcrumbs";
 const HERMES_SKILL_NAME = "project-progress";
 const HERMES_MCP_NAME = MCP_SERVER_NAME;
 
@@ -190,23 +168,23 @@ export const defaultCommandRunner: CommandRunner = async (command, args, options
 };
 
 export function helpText(): string {
-  return `Project Progress
+  return `Breadcrumbs
 
 Usage:
-  awesome-progress-tracker install [-g claude|codex|hermes] [--roots <paths>] [--verify]
-  awesome-progress-tracker install-mcp [-g claude|codex] [--roots <paths>] [--local] [--verify]
-  awesome-progress-tracker install-mcp -g hermes [--roots <paths>] [--verify]
-  awesome-progress-tracker doctor [-g claude|codex|hermes] [--json]
-  awesome-progress-tracker uninstall [-g claude|codex|hermes]
-  awesome-progress-tracker uninstall [-g claude|codex] --scope project
-  awesome-progress-tracker status [-g claude|codex|hermes]
-  awesome-progress-tracker state list
-  awesome-progress-tracker state set [directory] --state opted-in|opted-out|initialized|unknown
-  awesome-progress-tracker state reset [directory]
-  awesome-progress-tracker init [directory] [--project <name>] [--force]
-  awesome-progress-tracker compact [directory] [--write]
-  awesome-progress-tracker mcp
-  awesome-progress-tracker help
+  breadcrumbs install [-g claude|codex|hermes] [--roots <paths>] [--verify]
+  breadcrumbs install-mcp [-g claude|codex] [--roots <paths>] [--local] [--verify]
+  breadcrumbs install-mcp -g hermes [--roots <paths>] [--verify]
+  breadcrumbs doctor [-g claude|codex|hermes] [--json]
+  breadcrumbs uninstall [-g claude|codex|hermes]
+  breadcrumbs uninstall [-g claude|codex] --scope project
+  breadcrumbs status [-g claude|codex|hermes]
+  breadcrumbs state list
+  breadcrumbs state set [directory] --state opted-in|opted-out|initialized|unknown
+  breadcrumbs state reset [directory]
+  breadcrumbs init [directory] [--project <name>] [--force]
+  breadcrumbs compact [directory] [--write]
+  breadcrumbs mcp
+  breadcrumbs help
 
 Commands:
   install  Install bootstrap instructions for Claude Code/Codex or Skill + MCP for Hermes.
@@ -217,8 +195,11 @@ Commands:
   state  List, set, or reset per-project opt-in/opt-out state.
   init   Create project-progress/ Markdown files in a project.
   compact  Move old progress history into Archive.md (dry run unless --write).
-  mcp    Start the Project Progress MCP stdio server.
+  mcp    Start the Breadcrumbs MCP stdio server.
   help   Show this help.
+
+Aliases:
+  awesome-progress-tracker, project-progress (same commands and data)
 
 Environment:
   PROJECT_PROGRESS_ROOTS  Semicolon-separated roots scanned by the MCP server.
@@ -300,40 +281,45 @@ export async function initProjectAndIndex(options: InitOptions = {}): Promise<In
 function bootstrapBlock(agent: AgentTarget): string {
   const agentName = agent === "codex" ? "Codex" : "Claude Code";
   return `${BOOTSTRAP_START}
-## Awesome Progress Tracker
+## Breadcrumbs
 
-For multi-step work in ${agentName}, use project-local progress files from Awesome Progress Tracker.
+For multi-step work in ${agentName}, use project-local progress files from Breadcrumbs.
 
 At kickoff for any feature, investigation, refactor, debugging session, deployment, or release work:
 
 1. Check whether \`project-progress/Progress.md\` exists in the current project.
 2. If it exists, read the frontmatter and \`Resume Snapshot\` first, then load only the smallest extra sections needed.
 3. If it does not exist, ask the user before initializing:
-   "This project is not initialized with Awesome Progress Tracker. Do you want me to create \`project-progress/\` here?"
+   "This project is not initialized with Breadcrumbs. Do you want me to create \`project-progress/\` here?"
 4. Only initialize after the user says yes. Use:
-   \`npx github:AndriiLavrekha/awesome-progress-tracker init . --project "<project name>"\`
+   \`npx --package=${PACKAGE_SPEC} breadcrumbs init . --project "<project name>"\`
 5. If the user says no, record a per-project opt-out outside the repo with:
-   \`npx github:AndriiLavrekha/awesome-progress-tracker state set . --state opted-out\`
+   \`npx --package=${PACKAGE_SPEC} breadcrumbs state set . --state opted-out\`
    Then continue without creating progress files and do not ask again unless the user brings it up.
 
 Never create or overwrite \`project-progress/\` silently. Keep progress updates compact and avoid secrets.
 
-If the user asks you to test Awesome Progress Tracker itself, follow the self-test report format from the package documentation and clearly mark each scenario PASS, FAIL, PARTIAL, or NOT TESTED.
+If the user asks you to test Breadcrumbs itself, follow the self-test report format from the package documentation and clearly mark each scenario PASS, FAIL, PARTIAL, or NOT TESTED.
 ${BOOTSTRAP_END}`;
 }
 
-function upsertManagedBlock(existing: string, block: string): string {
-  const pattern = new RegExp(`${BOOTSTRAP_START}[\\s\\S]*?${BOOTSTRAP_END}`, "m");
+function upsertManagedBlock(existing: string, block: string, start: string, end: string): string {
+  const pattern = new RegExp(`${start}[\\s\\S]*?${end}`, "m");
   if (pattern.test(existing)) {
     return `${existing.replace(pattern, block).trimEnd()}\n`;
   }
   return `${existing.trimEnd()}${existing.trim() ? "\n\n" : ""}${block}\n`;
 }
 
-async function writeManagedBlock(filePath: string, block: string): Promise<void> {
+async function writeManagedBlock(
+  filePath: string,
+  block: string,
+  start = BOOTSTRAP_START,
+  end = BOOTSTRAP_END
+): Promise<void> {
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   const existing = (await pathExists(filePath)) ? await fs.readFile(filePath, "utf-8") : "";
-  await fs.writeFile(filePath, upsertManagedBlock(existing, block), "utf-8");
+  await fs.writeFile(filePath, upsertManagedBlock(existing, block, start, end), "utf-8");
 }
 
 function removeManagedBlock(existing: string, start: string, end: string): string {
@@ -421,7 +407,7 @@ ${CODEX_MCP_END}`;
 }
 
 async function installCodexMcpConfig(filePath: string, roots: string): Promise<void> {
-  await writeManagedBlock(filePath, codexMcpBlock(roots));
+  await writeManagedBlock(filePath, codexMcpBlock(roots), CODEX_MCP_START, CODEX_MCP_END);
 }
 
 async function removeTextBlock(filePath: string, start: string, end: string): Promise<boolean> {
@@ -438,7 +424,7 @@ async function fileContains(filePath: string, value: string): Promise<boolean> {
 }
 
 function hermesSkillUrl(): string {
-  return `https://raw.githubusercontent.com/AndriiLavrekha/awesome-progress-tracker/v${PACKAGE_VERSION}/skills/project-progress/SKILL.md`;
+  return `https://raw.githubusercontent.com/AndriiLavrekha/breadcrumbs/v${PACKAGE_VERSION}/skills/project-progress/SKILL.md`;
 }
 
 function stripAnsi(value: string): string {
@@ -1102,9 +1088,9 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
   if (parsed.command === "install") {
     const result = await installAgent({ agent: parsed.agent, roots: parsed.roots, scope: parsed.scope });
     if (result.agent === "hermes") {
-      console.log("Installed Awesome Progress Tracker Skill + MCP for Hermes.");
+      console.log("Installed Breadcrumbs Skill + MCP for Hermes.");
     } else {
-      console.log(`Installed Awesome Progress Tracker bootstrap for ${result.agent}.`);
+      console.log(`Installed Breadcrumbs bootstrap for ${result.agent}.`);
     }
     for (const file of result.writtenFiles) {
       console.log(`- ${file}`);
@@ -1112,11 +1098,11 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
     if (result.agent === "hermes") {
       console.log("Restart Hermes so it reloads the skill and MCP server.");
       console.log(
-        "Run `awesome-progress-tracker status -g hermes` and `awesome-progress-tracker doctor -g hermes` to verify setup."
+        "Run `breadcrumbs status -g hermes` and `breadcrumbs doctor -g hermes` to verify setup."
       );
     } else {
       console.log("Restart Claude Code/Codex so it reloads bootstrap instructions and MCP config.");
-      console.log("Run `awesome-progress-tracker status` or `awesome-progress-tracker doctor` to verify setup.");
+      console.log("Run `breadcrumbs status` or `breadcrumbs doctor` to verify setup.");
     }
     if (parsed.verify) {
       printDoctor(await runDoctor({ agent: parsed.agent }));
@@ -1132,9 +1118,9 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
       mcpOnly: true
     });
     if (result.agent === "hermes") {
-      console.log("Installed Awesome Progress Tracker MCP server for Hermes.");
+      console.log("Installed Breadcrumbs MCP server for Hermes.");
     } else {
-      console.log(`Installed Awesome Progress Tracker MCP config for ${result.agent}.`);
+      console.log(`Installed Breadcrumbs MCP config for ${result.agent}.`);
     }
     for (const file of result.writtenFiles) {
       console.log(`- ${file}`);
@@ -1142,7 +1128,7 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
     if (result.agent === "hermes") {
       console.log("Restart Hermes so it reloads the MCP server.");
       console.log(
-        "Run `awesome-progress-tracker status -g hermes` and `awesome-progress-tracker doctor -g hermes` to verify setup."
+        "Run `breadcrumbs status -g hermes` and `breadcrumbs doctor -g hermes` to verify setup."
       );
     } else {
       console.log("Restart Claude Code/Codex so it reloads MCP config.");
@@ -1164,9 +1150,9 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
       ? await uninstallProjectMcp()
       : await uninstallAgent({ agent: parsed.agent });
     if (result.agent === "hermes") {
-      console.log("Removed Awesome Progress Tracker Skill + MCP for Hermes.");
+      console.log("Removed Breadcrumbs Skill + MCP for Hermes.");
     } else {
-      console.log(`Removed Awesome Progress Tracker bootstrap for ${result.agent}.`);
+      console.log(`Removed Breadcrumbs bootstrap for ${result.agent}.`);
     }
     for (const file of result.changedFiles) {
       console.log(`- ${file}`);
@@ -1261,7 +1247,7 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
   throw new Error(`Unknown command: ${parsed.command}\n\n${helpText()}`);
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
   runCli().catch((error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
     console.error(message);

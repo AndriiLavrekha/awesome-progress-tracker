@@ -1,4 +1,4 @@
-# Project Progress Hooks
+# Breadcrumbs Hooks
 
 Hooks should remind, validate, and load compact context. They should not be the only mechanism for project progress. They do not write semantic progress summaries by themselves; agents are responsible for recording decisions, blockers, milestones, verification, and final resume state.
 
@@ -13,4 +13,4 @@ Use hooks as a safety net around `project-progress/Progress.md` and `Resume Snap
 
 Use `hooks/project-progress-check.ps1` on Windows and `hooks/project-progress-check.sh` on POSIX systems. Configure them as reminder and validation hooks; keep semantic progress summaries in the Markdown files through agent updates.
 
-Hooks cannot force an interactive prompt. For uninitialized projects, the hook should emit context and the agent should ask: `This project is not initialized with Awesome Progress Tracker. Do you want me to create project-progress/ here?` If the user declines, record local opt-out state with `awesome-progress-tracker state set . --state opted-out`.
+Hooks cannot force an interactive prompt. For uninitialized projects, the hook should emit context and the agent should ask: `This project is not initialized with Breadcrumbs. Do you want me to create project-progress/ here?` If the user declines, record local opt-out state with `breadcrumbs state set . --state opted-out`.

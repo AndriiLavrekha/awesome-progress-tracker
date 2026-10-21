@@ -81,7 +81,7 @@ export function renderProjectsMarkdown(index: ProjectIndex): string {
     })
     .join("\n");
 
-  return `# Awesome Progress Tracker Projects
+  return `# Breadcrumbs Projects
 
 Updated: ${index.updatedAt}
 

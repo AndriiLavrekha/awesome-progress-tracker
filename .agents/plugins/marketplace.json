@@ -1,7 +1,7 @@
 {
   "name": "awesome-progress-tracker",
   "interface": {
-    "displayName": "Awesome Progress Tracker"
+    "displayName": "Breadcrumbs"
   },
   "plugins": [
     {

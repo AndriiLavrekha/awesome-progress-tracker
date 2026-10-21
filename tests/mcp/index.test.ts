@@ -44,6 +44,7 @@ describe("project index", () => {
     expect(await readProjectIndex({ homeDir })).toEqual(index);
     expect(await fs.readFile(indexJsonPath(homeDir), "utf-8")).toContain("Valid Fixture");
     expect(await fs.readFile(indexMarkdownPath(homeDir), "utf-8")).toContain("| Valid Fixture | active |");
+    expect(await fs.readFile(indexMarkdownPath(homeDir), "utf-8")).toMatch(/^# Breadcrumbs Projects\n/);
   });
 
   it("upserts projects by progress path", async () => {

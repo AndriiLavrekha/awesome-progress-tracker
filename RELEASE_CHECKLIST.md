@@ -1,5 +1,34 @@
 # Release Checklist
 
+## Breadcrumbs v0.7.0 candidate
+
+- [x] Owner confirmed npm account `andriilavrekha`; `npm whoami` confirms the same CLI login. Package is `@andriilavrekha/breadcrumbs`.
+- [x] All three CLI aliases run from the packed artifact and share project data and saved opt-out state.
+- [x] Legacy Claude/Codex install, reinstall and uninstall preserve unrelated configuration and project files.
+- [x] Global npm upgrade is verified in an isolated prefix without `--force` or data migration.
+- [x] Full tests, typecheck, build and packed MCP handshake pass; package and manifest versions agree.
+- [x] Review remaining old names as compatibility identifiers or historical references.
+- [ ] Authorize the concrete candidate before repository rename, push/tag or publication.
+- [ ] After tagging, verify real Hermes, raw skill URL, GitHub install and existing plugin update routes.
+- [ ] Publish and verify the scoped package; bridge/deprecate an old npm package only if owned.
+- [ ] Publish `Breadcrumbs v0.7.0` on GitHub and remove the README release-candidate notice.
+
+### Local verification, 2026-10-21
+
+- WSL Node `20.20.0`, npm `10.8.2`: `npm test -- --no-color` passed **403/403** tests; `npm run typecheck` and `npm run build` passed.
+- `npm pack` produced `andriilavrekha-breadcrumbs-0.7.0.tgz`; inspected the allowlist and new compiled `dist/src/package.js`.
+- Installed that tarball into disposable npm prefixes. `breadcrumbs`, `awesome-progress-tracker` and `project-progress` printed identical help; explicit `npm exec --package=<tarball> -- breadcrumbs help` passed. Init, dry-run compact and opt-out state stayed shared across aliases.
+- Packed Claude/Codex install twice, status, doctor and uninstall passed with disposable homes. Unrelated MCP configuration, project progress and opt-out state survived. Unit tests separately seed the legacy managed markers and installed skill path.
+- Packed stdio MCP initialization advertised `project-progress` / `0.7.0` and listed the expected tools from a working directory outside the checkout.
+- A local fixture with the old package identity and two legacy bins reproduced npm `EEXIST` against the actual scoped tarball. Package-specific uninstall followed by scoped install passed without `--force`; data/configuration/state survived. This checks bin ownership, not a public legacy npm publication.
+- Windows Node `24.14.0`: `node dist/src/cli.js help` passed. Full Windows Vitest and Windows symlink privileges were not checked; native test dependencies in this checkout are Linux bindings.
+- Independent code review: no blocking issues after documentation corrections. `git diff --check` passed.
+- Authenticated registry reads return 404 for both package identities; neither public npm publication was found. GitHub admin access is confirmed and the target repository URL currently returns 404. No rename, push, tag, publication or live provider update has occurred.
+
+## Previous release verification (v0.6.0 and earlier)
+
+The checked items below are historical evidence, not verification of the Breadcrumbs v0.7.0 candidate. In particular, the new `v0.7.0` raw skill URL and live Hermes/plugin routes must pass the candidate gates above after tagging.
+
 - [x] Templates exist for `project-progress/`.
 - [x] Fixture projects cover valid, stale, and sensitive progress states.
 - [x] Hook and MCP tests pass (Node-only; no Python toolchain required).

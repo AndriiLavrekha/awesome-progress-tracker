@@ -19,8 +19,8 @@ async function initializationGuidance(cwd, hookEventName) {
     if (state === "opted-out")
         return { code: 0 };
     const statusLine = state === "opted-in"
-        ? "This project previously opted in to Awesome Progress Tracker, but `project-progress/Progress.md` is missing."
-        : "This project is not initialized with Awesome Progress Tracker.";
+        ? "This project previously opted in to Breadcrumbs, but `project-progress/Progress.md` is missing."
+        : "This project is not initialized with Breadcrumbs.";
     return {
         code: 0,
         stdout: emitJson({
@@ -28,8 +28,8 @@ async function initializationGuidance(cwd, hookEventName) {
                 hookEventName,
                 additionalContext: [
                     `${statusLine} For multi-step feature, investigation, refactor, debugging, deployment, release, or setup work, ask exactly:`,
-                    "\"This project is not initialized with Awesome Progress Tracker. Do you want me to create `project-progress/` here?\"",
-                    "Only initialize after the user says yes. If the user says no, record a per-project opt-out with `awesome-progress-tracker state set . --state opted-out`.",
+                    "\"This project is not initialized with Breadcrumbs. Do you want me to create `project-progress/` here?\"",
+                    "Only initialize after the user says yes. If the user says no, record a per-project opt-out with `breadcrumbs state set . --state opted-out`.",
                     "Do not ask for trivial one-off or read-only tasks. Do not create files from hooks. Never write secrets to progress files."
                 ].join("\n")
             }
@@ -250,7 +250,7 @@ export async function handleSessionStart(event) {
     await bestEffortRecordBodyHash(event.session_id, markdown);
     const frontmatter = parseFrontmatter(markdown);
     const lines = [
-        "This project uses Awesome Progress Tracker. `project-progress/Progress.md` is the canonical " +
+        "This project uses Breadcrumbs. `project-progress/Progress.md` is the canonical " +
             "resume source: read it before changing project files, and update Progress.md (Resume Snapshot, " +
             "Next Action, Blockers) before finishing meaningful work.",
         `Project: ${frontmatter.project ?? "(unknown)"} | Status: ${frontmatter.status ?? "?"} | Updated: ${frontmatter.updated ?? "?"}`

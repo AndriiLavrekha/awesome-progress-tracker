@@ -1,6 +1,6 @@
-# Awesome Progress Tracker Agent Self-Test
+# Breadcrumbs Agent Self-Test
 
-Use these instructions when the user asks you to test Awesome Progress Tracker behavior. Run tests in temporary projects unless the user explicitly asks you to test a real project.
+Use these instructions when the user asks you to test Breadcrumbs behavior. Run tests in temporary projects unless the user explicitly asks you to test a real project.
 
 ## Safety Rules
 
@@ -12,7 +12,7 @@ Use these instructions when the user asks you to test Awesome Progress Tracker b
 
 ## Required Checks
 
-1. Run `awesome-progress-tracker doctor` for the selected agent if the command is available.
+1. Run `breadcrumbs doctor` for the selected agent if the command is available.
 2. Test a new empty project.
 3. Test an existing project without `project-progress/`.
 4. Test an existing initialized project.
@@ -26,7 +26,7 @@ Use these instructions when the user asks you to test Awesome Progress Tracker b
 When `project-progress/Progress.md` is missing during meaningful work, ask:
 
 ```text
-This project is not initialized with Awesome Progress Tracker. Do you want me to create `project-progress/` here?
+This project is not initialized with Breadcrumbs. Do you want me to create `project-progress/` here?
 ```
 
 Only initialize after the user says yes.
@@ -38,7 +38,7 @@ When `project-progress/Progress.md` exists, read it first and update it before f
 Return a concise report:
 
 ```text
-Awesome Progress Tracker Self-Test
+Breadcrumbs Self-Test
 
 Environment:
 - Agent:

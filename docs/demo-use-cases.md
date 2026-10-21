@@ -1,4 +1,4 @@
-# Demo Use Cases — Awesome Progress Tracker
+# Demo Use Cases — Breadcrumbs
 
 Working script for recording showcase GIFs/clips for the README. Every scenario is real and runnable against the actual CLI (`src/cli.ts`), hooks (`src/hook/cc-adapter.ts`), and MCP server (`src/mcp/server.ts`) — nothing aspirational. Commands are copy-pasteable.
 
@@ -124,7 +124,7 @@ Two prerequisites, once, before recording anything:
 
 **Steps:**
 ```bash
-npx awesome-progress-tracker init . --project "My Project"
+npx --package=github:AndriiLavrekha/breadcrumbs breadcrumbs init . --project "My Project"
 ```
 or from this repo directly:
 ```bash
@@ -143,12 +143,12 @@ node dist/src/cli.js init /path/to/some/repo --project "Demo Project"
 
 **Steps:**
 ```text
-/plugin marketplace add AndriiLavrekha/awesome-progress-tracker
+/plugin marketplace add AndriiLavrekha/breadcrumbs
 /plugin install project-progress@awesome-progress-tracker
 ```
 or from a shell:
 ```bash
-claude plugin marketplace add AndriiLavrekha/awesome-progress-tracker
+claude plugin marketplace add AndriiLavrekha/breadcrumbs
 claude plugin install project-progress@awesome-progress-tracker
 ```
 
@@ -164,7 +164,7 @@ claude plugin install project-progress@awesome-progress-tracker
 
 **Steps:**
 ```bash
-codex plugin marketplace add AndriiLavrekha/awesome-progress-tracker
+codex plugin marketplace add AndriiLavrekha/breadcrumbs
 codex plugin add project-progress@awesome-progress-tracker
 ```
 
@@ -180,8 +180,8 @@ codex plugin add project-progress@awesome-progress-tracker
 
 **Steps:**
 ```bash
-npx awesome-progress-tracker status
-npx awesome-progress-tracker status -g codex
+npx --package=github:AndriiLavrekha/breadcrumbs breadcrumbs status
+npx --package=github:AndriiLavrekha/breadcrumbs breadcrumbs status -g codex
 ```
 
 **Record:** run on a fully-configured repo (all fields present), then again after removing one piece (e.g. the bootstrap block) to show the field flip to `false`.
@@ -196,8 +196,8 @@ npx awesome-progress-tracker status -g codex
 
 **Steps:**
 ```bash
-npx awesome-progress-tracker doctor
-npx awesome-progress-tracker doctor -g codex --json
+npx --package=github:AndriiLavrekha/breadcrumbs breadcrumbs doctor
+npx --package=github:AndriiLavrekha/breadcrumbs breadcrumbs doctor -g codex --json
 ```
 
 **Record:** break something first (delete `~/.codex/config.toml`'s MCP block, or point `PROJECT_PROGRESS_ROOTS` at a nonexistent directory), run `doctor`, show the exact failing check, then fix and re-run to green.
@@ -212,10 +212,10 @@ npx awesome-progress-tracker doctor -g codex --json
 
 **Steps:**
 ```bash
-npx awesome-progress-tracker install
-npx awesome-progress-tracker status        # confirm installed
-npx awesome-progress-tracker uninstall
-npx awesome-progress-tracker status        # confirm removed
+npx --package=github:AndriiLavrekha/breadcrumbs breadcrumbs install
+npx --package=github:AndriiLavrekha/breadcrumbs breadcrumbs status        # confirm installed
+npx --package=github:AndriiLavrekha/breadcrumbs breadcrumbs uninstall
+npx --package=github:AndriiLavrekha/breadcrumbs breadcrumbs status        # confirm removed
 ```
 
 **Record:** the four commands back to back, `status` flipping from all-present to all-absent. Optionally diff `~/.claude.json` before/after to show the key is fully gone, not commented out.

@@ -19,12 +19,12 @@ import {
   uninstallAgent
 } from "../../src/cli.js";
 import { readProjectIndex } from "../../src/mcp/index.js";
-import { readProjectTrackingState } from "../../src/project-state.js";
+import { readProjectTrackingState, setProjectTrackingState } from "../../src/project-state.js";
 
 const { spawnMock } = vi.hoisted(() => ({ spawnMock: vi.fn() }));
 
 const expectedSkillUrl =
-  `https://raw.githubusercontent.com/AndriiLavrekha/awesome-progress-tracker/v${
+  `https://raw.githubusercontent.com/AndriiLavrekha/breadcrumbs/v${
     (JSON.parse(readFileSync(path.join(process.cwd(), "package.json"), "utf-8")) as { version: string })
       .version
   }/skills/project-progress/SKILL.md`;
@@ -69,12 +69,66 @@ function mockHermesLifecycle(options: { installed?: boolean } = {}): void {
 }
 
 describe("npm CLI", () => {
+  it("uses Breadcrumbs in help while documenting the legacy aliases", () => {
+    expect(helpText()).toContain("Breadcrumbs");
+    expect(helpText()).toContain("breadcrumbs init");
+    expect(helpText()).toContain("awesome-progress-tracker");
+    expect(helpText()).toContain("project-progress");
+  });
+
+  it.each(["claude", "codex"] as const)("updates a legacy %s installation without duplicate configuration or data loss", async (agent) => {
+    const home = await fs.mkdtemp(path.join(os.tmpdir(), "breadcrumbs-upgrade-"));
+    const project = path.join(home, "project");
+    const progressPath = path.join(project, "project-progress", "Progress.md");
+    const memory = path.join(home, agent === "claude" ? ".claude" : ".codex", agent === "claude" ? "CLAUDE.md" : "AGENTS.md");
+    const start = "<!-- awesome-progress-tracker:start -->";
+    const end = "<!-- awesome-progress-tracker:end -->";
+    const userText = "Keep my own instructions.";
+    await fs.mkdir(path.dirname(memory), { recursive: true });
+    await fs.writeFile(memory, `${userText}\n\n${start}\n## Awesome Progress Tracker\nLegacy instructions.\n${end}\n`);
+    await fs.mkdir(path.dirname(progressPath), { recursive: true });
+    await fs.writeFile(progressPath, "Existing project progress, do not overwrite.\n");
+    await setProjectTrackingState(project, "opted-out", { homeDir: home });
+    const configPath = agent === "claude" ? path.join(home, ".claude.json") : path.join(home, ".codex", "config.toml");
+    if (agent === "claude") {
+      await fs.writeFile(configPath, JSON.stringify({ mcpServers: {
+        unrelated: { command: "keep-me" },
+        "awesome-progress-tracker": { command: "old-command" }
+      } }));
+    } else {
+      await fs.writeFile(configPath, '[mcp_servers.unrelated]\ncommand = "keep-me"\n\n# awesome-progress-tracker:mcp:start\n[mcp_servers.awesome-progress-tracker]\ncommand = "old-command"\n# awesome-progress-tracker:mcp:end\n');
+      const skill = path.join(home, ".codex", "skills", "awesome-progress-tracker", "SKILL.md");
+      await fs.mkdir(path.dirname(skill), { recursive: true });
+      await fs.writeFile(skill, "name: project-progress\nLegacy skill.\n");
+    }
+    for (let i = 0; i < 2; i++) await installAgent({ agent, homeDir: home, cwd: project });
+    const markdown = await fs.readFile(memory, "utf-8");
+    expect(markdown.split(start)).toHaveLength(2);
+    expect(markdown).toContain("## Breadcrumbs");
+    expect(markdown).not.toContain("Legacy instructions.");
+    expect(markdown).toContain(userText);
+    expect(await readStatus({ agent, homeDir: home, cwd: project })).toMatchObject({ bootstrapInstalled: true, mcpConfigured: true, projectInitialized: true });
+    const config = await fs.readFile(configPath, "utf-8");
+    expect(config).toContain("keep-me");
+    expect(config).not.toContain("old-command");
+    if (agent === "codex") expect(config.split("[mcp_servers.awesome-progress-tracker]")).toHaveLength(2);
+    else expect(Object.keys(JSON.parse(config).mcpServers)).toEqual(["unrelated", "awesome-progress-tracker"]);
+    await uninstallAgent({ agent, homeDir: home });
+    expect(await fs.readFile(memory, "utf-8")).toBe(`${userText}\n`);
+    expect(await fs.readFile(configPath, "utf-8")).toContain("keep-me");
+    expect(await fs.readFile(configPath, "utf-8")).not.toContain("awesome-progress-tracker");
+    expect(await fs.readFile(progressPath, "utf-8")).toBe("Existing project progress, do not overwrite.\n");
+    expect((await readProjectTrackingState(project, { homeDir: home })).state).toBe("opted-out");
+    await fs.rm(home, { recursive: true, force: true });
+  });
+
   it("exposes package binaries for npm and npx", async () => {
     const packageJson = JSON.parse(await fs.readFile(path.join(process.cwd(), "package.json"), "utf-8"));
 
     expect(packageJson.private).toBe(false);
-    expect(packageJson.name).toBe("awesome-progress-tracker");
+    expect(packageJson.name).toBe("@andriilavrekha/breadcrumbs");
     expect(packageJson.bin).toEqual({
+      breadcrumbs: "dist/src/cli.js",
       "awesome-progress-tracker": "dist/src/cli.js",
       "project-progress": "dist/src/cli.js"
     });
@@ -155,10 +209,10 @@ describe("npm CLI", () => {
       await expect(runCli(["install", "-g", "hermes"])).resolves.toBe(0);
       const output = log.mock.calls.map(([line]) => String(line)).join("\n");
 
-      expect(output).toContain("Installed Awesome Progress Tracker Skill + MCP for Hermes.");
+      expect(output).toContain("Installed Breadcrumbs Skill + MCP for Hermes.");
       expect(output).toContain("Restart Hermes so it reloads the skill and MCP server.");
-      expect(output).toContain("awesome-progress-tracker status -g hermes");
-      expect(output).toContain("awesome-progress-tracker doctor -g hermes");
+      expect(output).toContain("breadcrumbs status -g hermes");
+      expect(output).toContain("breadcrumbs doctor -g hermes");
       expect(output).not.toContain("bootstrap");
       expect(output).not.toContain("Claude Code/Codex");
     } finally {
@@ -175,10 +229,10 @@ describe("npm CLI", () => {
       await expect(runCli(["install-mcp", "-g", "hermes"])).resolves.toBe(0);
       const output = log.mock.calls.map(([line]) => String(line)).join("\n");
 
-      expect(output).toContain("Installed Awesome Progress Tracker MCP server for Hermes.");
+      expect(output).toContain("Installed Breadcrumbs MCP server for Hermes.");
       expect(output).toContain("Restart Hermes so it reloads the MCP server.");
-      expect(output).toContain("awesome-progress-tracker status -g hermes");
-      expect(output).toContain("awesome-progress-tracker doctor -g hermes");
+      expect(output).toContain("breadcrumbs status -g hermes");
+      expect(output).toContain("breadcrumbs doctor -g hermes");
       expect(output).not.toContain("Claude Code/Codex");
     } finally {
       log.mockRestore();
@@ -194,7 +248,7 @@ describe("npm CLI", () => {
       await expect(runCli(["uninstall", "-g", "hermes"])).resolves.toBe(0);
       const output = log.mock.calls.map(([line]) => String(line)).join("\n");
 
-      expect(output).toContain("Removed Awesome Progress Tracker Skill + MCP for Hermes.");
+      expect(output).toContain("Removed Breadcrumbs Skill + MCP for Hermes.");
       expect(output).not.toContain("bootstrap");
     } finally {
       log.mockRestore();
@@ -231,15 +285,15 @@ describe("npm CLI", () => {
 
     expect(result.agent).toBe("claude");
     expect(result.writtenFiles).toEqual([claudeMemory, claudeConfig]);
-    expect(markdown).toContain("This project is not initialized with Awesome Progress Tracker");
+    expect(markdown).toContain("This project is not initialized with Breadcrumbs");
     expect(markdown).toContain("Only initialize after the user says yes");
-    expect(markdown).toContain("npx github:AndriiLavrekha/awesome-progress-tracker init");
+    expect(markdown).toContain("npx --package=github:AndriiLavrekha/breadcrumbs breadcrumbs init");
     expect(config.mcpServers["awesome-progress-tracker"]).toEqual({
       type: "stdio",
       command: "npx",
-      args: ["-y", "github:AndriiLavrekha/awesome-progress-tracker", "mcp"],
+      args: ["-y", "github:AndriiLavrekha/breadcrumbs", "mcp"],
       env: {
-        PROJECT_PROGRESS_ROOTS: "C:/repo"
+        PROJECT_PROGRESS_ROOTS: path.resolve("C:/repo").replace(/\\/g, "/")
       }
     });
   });
@@ -260,7 +314,7 @@ describe("npm CLI", () => {
     expect(agentsMarkdown).toContain("ask the user before initializing");
     expect(skillMarkdown).toContain("name: project-progress");
     expect(configToml).toContain("[mcp_servers.awesome-progress-tracker]");
-    expect(configToml).toContain('args = ["-y", "github:AndriiLavrekha/awesome-progress-tracker", "mcp"]');
+    expect(configToml).toContain('args = ["-y", "github:AndriiLavrekha/breadcrumbs", "mcp"]');
     expect(configToml).toContain('PROJECT_PROGRESS_ROOTS = "C:/one;C:/two"');
   });
 
@@ -316,7 +370,7 @@ describe("npm CLI", () => {
           "PROJECT_PROGRESS_ROOTS=C:/one;C:/two",
           "--args",
           "-y",
-          "github:AndriiLavrekha/awesome-progress-tracker",
+          "github:AndriiLavrekha/breadcrumbs",
           "mcp"
         ],
         stdin: "y\n"
@@ -371,7 +425,7 @@ describe("npm CLI", () => {
           "PROJECT_PROGRESS_ROOTS=C:/one;C:/two",
           "--args",
           "-y",
-          "github:AndriiLavrekha/awesome-progress-tracker",
+          "github:AndriiLavrekha/breadcrumbs",
           "mcp"
         ],
         stdin: "y\n"
@@ -529,7 +583,7 @@ describe("npm CLI", () => {
           "PROJECT_PROGRESS_ROOTS=C:/one;C:/two",
           "--args",
           "-y",
-          "github:AndriiLavrekha/awesome-progress-tracker",
+          "github:AndriiLavrekha/breadcrumbs",
           "mcp"
         ],
         stdin: "y\n"
@@ -599,7 +653,7 @@ describe("npm CLI", () => {
           "PROJECT_PROGRESS_ROOTS=C:/one;C:/two",
           "--args",
           "-y",
-          "github:AndriiLavrekha/awesome-progress-tracker",
+          "github:AndriiLavrekha/breadcrumbs",
           "mcp"
         ],
         stdin: "y\n"
@@ -840,7 +894,7 @@ describe("npm CLI", () => {
     expect(config.mcpServers["awesome-progress-tracker"]).toEqual({
       type: "stdio",
       command: "npx",
-      args: ["-y", "github:AndriiLavrekha/awesome-progress-tracker", "mcp"],
+      args: ["-y", "github:AndriiLavrekha/breadcrumbs", "mcp"],
       env: {
         PROJECT_PROGRESS_ROOTS: "C:/repo"
       }
