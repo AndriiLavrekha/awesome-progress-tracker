@@ -1,8 +1,10 @@
 {
   "mcpServers": {
-    "project-progress": {
+    "breadcrumbs": {
       "command": "node",
-      "args": ["dist/src/mcp/server.js"],
+      "args": [
+        "dist/src/mcp/server.js"
+      ],
       "cwd": "."
     }
   }

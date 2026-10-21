@@ -1,6 +1,6 @@
 {
   "name": "@andriilavrekha/breadcrumbs",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Breadcrumbs: resumable project-local Markdown memory for coding agents.",
   "homepage": "https://github.com/AndriiLavrekha/breadcrumbs",
   "repository": {
@@ -22,7 +22,7 @@
     "dist/src",
     "templates/project-progress",
     "agent-instructions",
-    "skills/project-progress",
+    "skills/breadcrumbs",
     ".codex-plugin",
     ".agents/plugins",
     ".mcp.json",

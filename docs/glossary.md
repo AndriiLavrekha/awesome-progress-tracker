@@ -26,4 +26,4 @@ The one line naming the provider, agent, model, and effort of the session that l
 
 ## Tracker MCP server
 
-The Node stdio server started by `breadcrumbs mcp`. In Hermes it's registered as `awesome-progress-tracker`; discovered tools are prefixed `mcp_awesome_progress_tracker_`.
+The Node stdio server started by `breadcrumbs mcp`. In Hermes it's registered as `breadcrumbs`; discovered tools are prefixed `mcp_breadcrumbs_`.

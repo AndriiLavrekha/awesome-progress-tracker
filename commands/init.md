@@ -5,7 +5,7 @@ argument-hint: [project name]
 
 Initialize Breadcrumbs for the current project.
 
-Use the `project-progress` skill. Steps:
+Use the `breadcrumbs` skill. Steps:
 
 1. If `project-progress/Progress.md` already exists, stop and report it is already initialized — do not overwrite it.
 2. Otherwise create the `project-progress/` directory from the canonical templates.

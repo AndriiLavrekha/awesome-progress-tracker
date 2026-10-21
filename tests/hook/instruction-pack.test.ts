@@ -11,6 +11,13 @@ function assertContainsAll(text: string, phrases: string[]): void {
 }
 
 describe("instruction pack", () => {
+  it("documents the new plugin identity and keeps the old selector only for removal", async () => {
+    const text = await read("README.md");
+    expect(text).toContain("claude plugin install breadcrumbs@breadcrumbs");
+    expect(text).toContain("codex plugin add breadcrumbs@breadcrumbs");
+    expect(text).toContain("claude plugin uninstall project-progress@awesome-progress-tracker");
+    expect(text).not.toMatch(/plugin (?:install|add) project-progress@awesome-progress-tracker/);
+  });
   it("documents Hermes support as skill plus MCP with hooks deferred", async () => {
     const text = await read("README.md");
     assertContainsAll(text, [
@@ -43,7 +50,7 @@ describe("instruction pack", () => {
       "Remove-Item Env:HERMES_HOME",
       "hermes skills list --source hub",
       "hermes mcp list",
-      "hermes mcp test awesome-progress-tracker",
+      "hermes mcp test breadcrumbs",
       "list projects",
       "read project progress",
       "update the Next Action",
@@ -58,15 +65,15 @@ describe("instruction pack", () => {
       "Hermes docs match the supported surface: skill + MCP only; lifecycle hooks are deferred.",
       "Disposable Hermes verification uses a temporary `HERMES_HOME`.",
       "`install -g hermes`, `doctor -g hermes`, and `uninstall -g hermes` work against the packaged tarball.",
-      "`hermes skills list --source hub`, `hermes mcp list`, and `hermes mcp test awesome-progress-tracker` pass.",
+      "`hermes skills list --source hub`, `hermes mcp list`, and `hermes mcp test breadcrumbs` pass.",
       "Hermes agent tool discovery/read/update smoke tests pass in a disposable Codex OAuth profile.",
       "Hermes opt-out and uninstall paths are verified."
     ]);
   });
 
   it("declares the expected Codex skill frontmatter", async () => {
-    const text = await read("skills/project-progress/SKILL.md");
-    expect(text).toContain("name: project-progress");
+    const text = await read("skills/breadcrumbs/SKILL.md");
+    expect(text).toContain("name: breadcrumbs");
     expect(text).toContain(
       "Maintain project-local Markdown progress state in project-progress/ for " +
         "multi-step work, resumability, lifecycle checkpoints, and " +
@@ -75,7 +82,7 @@ describe("instruction pack", () => {
   });
 
   it("mentions trigger categories in the Codex skill", async () => {
-    const text = await read("skills/project-progress/SKILL.md");
+    const text = await read("skills/breadcrumbs/SKILL.md");
     assertContainsAll(text, [
       "multi-step feature",
       "investigation",
@@ -88,7 +95,7 @@ describe("instruction pack", () => {
   });
 
   it("mentions instruction-contract terms in the Codex skill", async () => {
-    const text = await read("skills/project-progress/SKILL.md");
+    const text = await read("skills/breadcrumbs/SKILL.md");
     assertContainsAll(text, [
       "project-progress/Progress.md",
       "canonical source of truth",

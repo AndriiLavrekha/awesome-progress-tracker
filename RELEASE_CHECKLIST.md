@@ -1,6 +1,15 @@
 # Release Checklist
 
-## Breadcrumbs v0.7.0 candidate
+## Breadcrumbs v0.8.0 identity release
+
+- [x] Both plugin and marketplace manifests identify `breadcrumbs`; install selector `breadcrumbs@breadcrumbs`.
+- [x] Bundled skill, Hermes components, MCP keys/handshake, and all current install commands use `breadcrumbs`.
+- [ ] `hermes skills list --source hub`, `hermes mcp list`, and `hermes mcp test breadcrumbs` pass.
+- [ ] Old uninstall/new install succeeds in disposable Claude/Codex/Hermes profiles with project data and unrelated configuration retained.
+- [x] Full Linux/Windows tests, typecheck/build and packed runtime checks pass.
+- [ ] v0.8.0 merged/tagged/pushed, GitHub release public, npm package published and registry install verified.
+
+## Breadcrumbs v0.7.0 candidate (superseded; historical verification)
 
 - [x] Owner confirmed npm account `andriilavrekha`; `npm whoami` confirms the same CLI login. Package is `@andriilavrekha/breadcrumbs`.
 - [x] All three CLI aliases run from the packed artifact and share project data and saved opt-out state.
@@ -102,3 +111,10 @@ The checked items below are historical evidence, not verification of the Breadcr
 - Hermes0.19.1 installed the tagged raw skill and GitHub npx MCP server, passed status/doctor/connectivity, discovered six tools, and performed read/update/readback through its generated MCP configuration. Opt-out suppresses initialization guidance. Managed uninstall preserves project data and opt-out state.
 - The exact tagged GitHub npx command prints Breadcrumbs help. A GitHub draft release has the verified tarball attached; asset SHA256 is88ccd17eeec4c6c30534e7d0eb3bb14a9b48a13ba8d4db23de837374daf41dba.
 - Public npm publication is awaiting the registry-required browser2FA confirmation. No credentials or auth URLs are recorded here. The npm CLI browser prompt was suppressed by noninteractive tool streams, so the same standard npm-profile web-auth flow is being used explicitly; user browser approval remains required.
+
+### v0.8.0 candidate verification, 2026-10-21
+
+- WSL405/405 tests pass; Windows404pass/1POSIX-only skip. Both typecheck/build pass.
+- Canonical manifests/package/lockfile versions all0.8.0; plugin+marketplace+skill+MCP identities all breadcrumbs. Native disposable Claude/Codex profiles uninstalled project-progress@awesome-progress-tracker, removed its marketplace and installed breadcrumbs@breadcrumbs0.8.0 from the candidate.
+- Packed scoped artifact passes all three aliases/npm exec/init/compact/shared state/Claude+Codex lifecycle/MCP breadcrumbs0.8.0, plus safe legacy-bin collision upgrade without --force. Old marker/server-key/skill-path cleanup and legacy status/doctor checks have regression tests.
+- Independent code review found two legacy status-reporting gaps; both fixed and regression-verified, including Hermes connectivity against the detected legacy server name. No review blockers remain. Tagged remote install checks and publication follow next.

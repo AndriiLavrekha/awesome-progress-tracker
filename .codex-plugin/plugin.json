@@ -1,7 +1,7 @@
 {
-  "name": "project-progress",
-  "version": "0.7.0",
-  "description": "Breadcrumbs: project-local Markdown progress tracking for resumable, multi-step agent work. Bundles the project-progress skill, an MCP server for a cross-project index, and lifecycle hooks that inject resume context on session start and guard sensitive progress on commit.",
+  "name": "breadcrumbs",
+  "version": "0.8.0",
+  "description": "Breadcrumbs: project-local Markdown progress tracking for resumable, multi-step agent work. Bundles the breadcrumbs skill, an MCP server for a cross-project index, and lifecycle hooks that inject resume context on session start and guard sensitive progress on commit.",
   "author": {
     "name": "Andrii Lavrekha",
     "url": "https://github.com/AndriiLavrekha"

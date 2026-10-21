@@ -20,9 +20,10 @@ import type { ProjectStateOptions, ProjectTrackingState, ProjectTrackingStateEnt
 
 const execFileAsync = promisify(execFile);
 const TEMPLATE_DIR = path.join(PACKAGE_ROOT, "templates", "project-progress");
-const MCP_SERVER_NAME = "awesome-progress-tracker";
+const MCP_SERVER_NAME = "breadcrumbs";
+const LEGACY_MCP_SERVER_NAME = "awesome-progress-tracker";
 const PACKAGE_SPEC = "github:AndriiLavrekha/breadcrumbs";
-const HERMES_SKILL_NAME = "project-progress";
+const HERMES_SKILL_NAME = "breadcrumbs";
 const HERMES_MCP_NAME = MCP_SERVER_NAME;
 
 export interface InitOptions {
@@ -108,10 +109,14 @@ export interface DoctorResult {
   checks: DoctorCheck[];
 }
 
-const BOOTSTRAP_START = "<!-- awesome-progress-tracker:start -->";
-const BOOTSTRAP_END = "<!-- awesome-progress-tracker:end -->";
-const CODEX_MCP_START = "# awesome-progress-tracker:mcp:start";
-const CODEX_MCP_END = "# awesome-progress-tracker:mcp:end";
+const BOOTSTRAP_START = "<!-- breadcrumbs:start -->";
+const BOOTSTRAP_END = "<!-- breadcrumbs:end -->";
+const CODEX_MCP_START = "# breadcrumbs:mcp:start";
+const CODEX_MCP_END = "# breadcrumbs:mcp:end";
+const LEGACY_MARKERS: Record<string, readonly [string, string]> = {
+  [BOOTSTRAP_START]: ["<!-- awesome-progress-tracker:start -->", "<!-- awesome-progress-tracker:end -->"],
+  [CODEX_MCP_START]: ["# awesome-progress-tracker:mcp:start", "# awesome-progress-tracker:mcp:end"]
+};
 
 export const defaultCommandRunner: CommandRunner = async (command, args, options = {}) => {
   const child = spawn(command, args, {
@@ -318,12 +323,14 @@ async function writeManagedBlock(
   end = BOOTSTRAP_END
 ): Promise<void> {
   await fs.mkdir(path.dirname(filePath), { recursive: true });
-  const existing = (await pathExists(filePath)) ? await fs.readFile(filePath, "utf-8") : "";
+  let existing = (await pathExists(filePath)) ? await fs.readFile(filePath, "utf-8") : "";
+  const legacy = LEGACY_MARKERS[start];
+  if (legacy && existing.includes(legacy[0])) existing = removeManagedBlock(existing, ...legacy);
   await fs.writeFile(filePath, upsertManagedBlock(existing, block, start, end), "utf-8");
 }
 
 function removeManagedBlock(existing: string, start: string, end: string): string {
-  const pattern = new RegExp(`\\n?${start}[\\s\\S]*?${end}\\n?`, "m");
+  const pattern = new RegExp(`\\n?${start}[\\s\\S]*?${end}\\n?`, "g");
   return `${existing.replace(pattern, "\n").trimEnd()}\n`;
 }
 
@@ -357,7 +364,7 @@ async function readJsonObject(filePath: string): Promise<Record<string, unknown>
   return parsed as Record<string, unknown>;
 }
 
-async function installProjectMcpConfig(filePath: string, roots: string): Promise<void> {
+async function installJsonMcpConfig(filePath: string, roots: string): Promise<void> {
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   const config = await readJsonObject(filePath);
   const mcpServers = config.mcpServers;
@@ -365,6 +372,7 @@ async function installProjectMcpConfig(filePath: string, roots: string): Promise
     config.mcpServers = {};
   }
   (config.mcpServers as Record<string, unknown>)[MCP_SERVER_NAME] = mcpServerConfig(roots);
+  delete (config.mcpServers as Record<string, unknown>)[LEGACY_MCP_SERVER_NAME];
   await fs.writeFile(filePath, `${JSON.stringify(config, null, 2)}\n`, "utf-8");
 }
 
@@ -373,25 +381,11 @@ async function removeJsonMcpConfig(filePath: string): Promise<boolean> {
   const config = await readJsonObject(filePath);
   const mcpServers = config.mcpServers;
   if (!mcpServers || typeof mcpServers !== "object" || Array.isArray(mcpServers)) return false;
-  if (!(MCP_SERVER_NAME in mcpServers)) return false;
+  if (!(MCP_SERVER_NAME in mcpServers) && !(LEGACY_MCP_SERVER_NAME in mcpServers)) return false;
   delete (mcpServers as Record<string, unknown>)[MCP_SERVER_NAME];
+  delete (mcpServers as Record<string, unknown>)[LEGACY_MCP_SERVER_NAME];
   await fs.writeFile(filePath, `${JSON.stringify(config, null, 2)}\n`, "utf-8");
   return true;
-}
-
-async function installClaudeMcpConfig(filePath: string, roots: string): Promise<void> {
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
-  const config = await readJsonObject(filePath);
-  const mcpServers = config.mcpServers;
-  if (!mcpServers || typeof mcpServers !== "object" || Array.isArray(mcpServers)) {
-    config.mcpServers = {};
-  }
-  (config.mcpServers as Record<string, unknown>)[MCP_SERVER_NAME] = mcpServerConfig(roots);
-  await fs.writeFile(filePath, `${JSON.stringify(config, null, 2)}\n`, "utf-8");
-}
-
-async function removeClaudeMcpConfig(filePath: string): Promise<boolean> {
-  return removeJsonMcpConfig(filePath);
 }
 
 function codexMcpBlock(roots: string): string {
@@ -413,18 +407,23 @@ async function installCodexMcpConfig(filePath: string, roots: string): Promise<v
 async function removeTextBlock(filePath: string, start: string, end: string): Promise<boolean> {
   if (!(await pathExists(filePath))) return false;
   const existing = await fs.readFile(filePath, "utf-8");
-  if (!existing.includes(start)) return false;
-  await fs.writeFile(filePath, removeManagedBlock(existing, start, end), "utf-8");
+  const legacy = LEGACY_MARKERS[start];
+  if (!existing.includes(start) && !(legacy && existing.includes(legacy[0]))) return false;
+  let updated = removeManagedBlock(existing, start, end);
+  if (legacy) updated = removeManagedBlock(updated, ...legacy);
+  await fs.writeFile(filePath, updated, "utf-8");
   return true;
 }
 
 async function fileContains(filePath: string, value: string): Promise<boolean> {
   if (!(await pathExists(filePath))) return false;
-  return (await fs.readFile(filePath, "utf-8")).includes(value);
+  const content = await fs.readFile(filePath, "utf-8");
+  const legacy = LEGACY_MARKERS[value];
+  return content.includes(value) || Boolean(legacy && content.includes(legacy[0]));
 }
 
 function hermesSkillUrl(): string {
-  return `https://raw.githubusercontent.com/AndriiLavrekha/breadcrumbs/v${PACKAGE_VERSION}/skills/project-progress/SKILL.md`;
+  return `https://raw.githubusercontent.com/AndriiLavrekha/breadcrumbs/v${PACKAGE_VERSION}/skills/breadcrumbs/SKILL.md`;
 }
 
 function stripAnsi(value: string): string {
@@ -492,7 +491,7 @@ export async function installAgent(options: InstallOptions = {}): Promise<Instal
 
   if (scope === "project") {
     const projectConfig = projectMcpConfigPath(options.cwd);
-    await installProjectMcpConfig(projectConfig, roots);
+    await installJsonMcpConfig(projectConfig, roots);
     return { agent, writtenFiles: [projectConfig] };
   }
 
@@ -504,7 +503,7 @@ export async function installAgent(options: InstallOptions = {}): Promise<Instal
     }
 
     const claudeConfig = path.join(homeDir, ".claude.json");
-    await installClaudeMcpConfig(claudeConfig, roots);
+    await installJsonMcpConfig(claudeConfig, roots);
     writtenFiles.push(claudeConfig);
     return { agent, writtenFiles };
   }
@@ -516,13 +515,20 @@ export async function installAgent(options: InstallOptions = {}): Promise<Instal
 
     if (!options.mcpOnly) {
       const skillList = await runHermesCommand(commandRunner, ["skills", "list", "--source", "hub"]);
-      skillAlreadyInstalled = parseHermesSkillList(skillList.stdout).has(HERMES_SKILL_NAME);
+      const skills = parseHermesSkillList(skillList.stdout);
+      skillAlreadyInstalled = skills.has(HERMES_SKILL_NAME);
       if (skillAlreadyInstalled) collisions.push(`Hermes skill already exists: ${HERMES_SKILL_NAME}`);
+      if (skills.has("project-progress")) {
+        collisions.push("Legacy Hermes skill exists. Run `breadcrumbs uninstall -g hermes` before reinstalling.");
+      }
     }
 
     const mcpList = await runHermesCommand(commandRunner, ["mcp", "list"]);
     if (parseHermesMcpList(mcpList.stdout).has(HERMES_MCP_NAME)) {
       collisions.push(`Hermes MCP server already exists: ${HERMES_MCP_NAME}`);
+    }
+    if (parseHermesMcpList(mcpList.stdout).has(LEGACY_MCP_SERVER_NAME)) {
+      collisions.push("Legacy Hermes MCP server exists. Run `breadcrumbs uninstall -g hermes` before reinstalling.");
     }
 
     if (collisions.length > 0) {
@@ -575,10 +581,11 @@ export async function installAgent(options: InstallOptions = {}): Promise<Instal
     await writeManagedBlock(codexAgents, bootstrapBlock(agent));
     writtenFiles.push(codexAgents);
 
-    const skillSource = path.join(PACKAGE_ROOT, "skills", "project-progress", "SKILL.md");
-    const skillTarget = path.join(homeDir, ".codex", "skills", "awesome-progress-tracker", "SKILL.md");
+    const skillSource = path.join(PACKAGE_ROOT, "skills", "breadcrumbs", "SKILL.md");
+    const skillTarget = path.join(homeDir, ".codex", "skills", "breadcrumbs", "SKILL.md");
     await fs.mkdir(path.dirname(skillTarget), { recursive: true });
     await fs.copyFile(skillSource, skillTarget);
+    await fs.rm(path.join(homeDir, ".codex", "skills", "awesome-progress-tracker", "SKILL.md"), { force: true });
     writtenFiles.push(skillTarget);
   }
 
@@ -600,7 +607,7 @@ export async function uninstallAgent(options: UninstallOptions = {}): Promise<Un
     const claudeMemory = path.join(homeDir, ".claude", "CLAUDE.md");
     if (await removeTextBlock(claudeMemory, BOOTSTRAP_START, BOOTSTRAP_END)) changedFiles.push(claudeMemory);
     const claudeConfig = path.join(homeDir, ".claude.json");
-    if (await removeClaudeMcpConfig(claudeConfig)) changedFiles.push(claudeConfig);
+    if (await removeJsonMcpConfig(claudeConfig)) changedFiles.push(claudeConfig);
     return { agent, changedFiles };
   }
 
@@ -608,17 +615,19 @@ export async function uninstallAgent(options: UninstallOptions = {}): Promise<Un
     const commandRunner = options.commandRunner ?? defaultCommandRunner;
     const skillList = await runHermesCommand(commandRunner, ["skills", "list", "--source", "hub"]);
     const mcpList = await runHermesCommand(commandRunner, ["mcp", "list"]);
-    const skillInstalled = parseHermesSkillList(skillList.stdout).has(HERMES_SKILL_NAME);
-    const mcpConfigured = parseHermesMcpList(mcpList.stdout).has(HERMES_MCP_NAME);
+    const skills = parseHermesSkillList(skillList.stdout);
+    const servers = parseHermesMcpList(mcpList.stdout);
 
-    if (mcpConfigured) {
-      await runHermesCommand(commandRunner, ["mcp", "remove", HERMES_MCP_NAME], { stdin: "y\n" });
-      changedFiles.push(`Hermes MCP server: ${HERMES_MCP_NAME}`);
+    for (const name of [HERMES_MCP_NAME, LEGACY_MCP_SERVER_NAME]) {
+      if (!servers.has(name)) continue;
+      await runHermesCommand(commandRunner, ["mcp", "remove", name], { stdin: "y\n" });
+      changedFiles.push(`Hermes MCP server: ${name}`);
     }
 
-    if (skillInstalled) {
-      await runHermesCommand(commandRunner, ["skills", "uninstall", HERMES_SKILL_NAME], { stdin: "y\n" });
-      changedFiles.push(`Hermes skill: ${HERMES_SKILL_NAME}`);
+    for (const name of [HERMES_SKILL_NAME, "project-progress"]) {
+      if (!skills.has(name)) continue;
+      await runHermesCommand(commandRunner, ["skills", "uninstall", name], { stdin: "y\n" });
+      changedFiles.push(`Hermes skill: ${name}`);
     }
 
     return { agent, changedFiles };
@@ -627,10 +636,12 @@ export async function uninstallAgent(options: UninstallOptions = {}): Promise<Un
   const codexAgents = path.join(homeDir, ".codex", "AGENTS.md");
   if (await removeTextBlock(codexAgents, BOOTSTRAP_START, BOOTSTRAP_END)) changedFiles.push(codexAgents);
 
-  const codexSkill = path.join(homeDir, ".codex", "skills", "awesome-progress-tracker", "SKILL.md");
-  if (await pathExists(codexSkill)) {
-    await fs.unlink(codexSkill);
-    changedFiles.push(codexSkill);
+  for (const name of ["breadcrumbs", "awesome-progress-tracker"]) {
+    const codexSkill = path.join(homeDir, ".codex", "skills", name, "SKILL.md");
+    if (await pathExists(codexSkill)) {
+      await fs.unlink(codexSkill);
+      changedFiles.push(codexSkill);
+    }
   }
 
   const codexConfig = path.join(homeDir, ".codex", "config.toml");
@@ -667,7 +678,7 @@ export async function readStatus(options: StatusOptions = {}): Promise<StatusRes
         mcpServers &&
           typeof mcpServers === "object" &&
           !Array.isArray(mcpServers) &&
-          MCP_SERVER_NAME in mcpServers
+          (MCP_SERVER_NAME in mcpServers || LEGACY_MCP_SERVER_NAME in mcpServers)
       ),
       files: {
         bootstrap: claudeMemory,
@@ -681,22 +692,28 @@ export async function readStatus(options: StatusOptions = {}): Promise<StatusRes
     const commandRunner = options.commandRunner ?? defaultCommandRunner;
     const skillList = await runHermesCommand(commandRunner, ["skills", "list", "--source", "hub"]);
     const mcpList = await runHermesCommand(commandRunner, ["mcp", "list"]);
+    const skills = parseHermesSkillList(skillList.stdout);
+    const servers = parseHermesMcpList(mcpList.stdout);
+    const skillName = !skills.has(HERMES_SKILL_NAME) && skills.has("project-progress") ? "project-progress" : HERMES_SKILL_NAME;
+    const mcpName = !servers.has(HERMES_MCP_NAME) && servers.has(LEGACY_MCP_SERVER_NAME) ? LEGACY_MCP_SERVER_NAME : HERMES_MCP_NAME;
     return {
       agent,
       projectInitialized: await pathExists(projectProgress),
       bootstrapInstalled: false,
-      mcpConfigured: parseHermesMcpList(mcpList.stdout).has(HERMES_MCP_NAME),
-      skillInstalled: parseHermesSkillList(skillList.stdout).has(HERMES_SKILL_NAME),
+      mcpConfigured: servers.has(mcpName),
+      skillInstalled: skills.has(skillName),
       files: {
-        skill: `Hermes skill: ${HERMES_SKILL_NAME}`,
-        mcpConfig: `Hermes MCP server: ${HERMES_MCP_NAME}`,
+        skill: `Hermes skill: ${skillName}`,
+        mcpConfig: `Hermes MCP server: ${mcpName}`,
         projectProgress
       }
     };
   }
 
   const codexAgents = path.join(homeDir, ".codex", "AGENTS.md");
-  const codexSkill = path.join(homeDir, ".codex", "skills", "awesome-progress-tracker", "SKILL.md");
+  let codexSkill = path.join(homeDir, ".codex", "skills", "breadcrumbs", "SKILL.md");
+  const legacySkill = path.join(homeDir, ".codex", "skills", "awesome-progress-tracker", "SKILL.md");
+  if (!(await pathExists(codexSkill)) && await pathExists(legacySkill)) codexSkill = legacySkill;
   const codexConfig = path.join(homeDir, ".codex", "config.toml");
   return {
     agent,
@@ -758,11 +775,13 @@ export async function runDoctor(options: StatusOptions = {}): Promise<DoctorResu
     let skillMessage = "Hermes skill is missing";
     let mcpConfigured = false;
     let mcpMessage = "Hermes MCP server is missing";
+    let mcpName = HERMES_MCP_NAME;
 
     if (hermesAvailable) {
       try {
         const skillList = await runHermesCommand(commandRunner, ["skills", "list", "--source", "hub"]);
-        skillInstalled = parseHermesSkillList(skillList.stdout).has(HERMES_SKILL_NAME);
+        const skills = parseHermesSkillList(skillList.stdout);
+        skillInstalled = skills.has(HERMES_SKILL_NAME) || skills.has("project-progress");
         skillMessage = skillInstalled ? "Hermes skill is installed" : "Hermes skill is missing";
       } catch (error) {
         skillMessage = asErrorMessage(error);
@@ -770,7 +789,9 @@ export async function runDoctor(options: StatusOptions = {}): Promise<DoctorResu
 
       try {
         const mcpList = await runHermesCommand(commandRunner, ["mcp", "list"]);
-        mcpConfigured = parseHermesMcpList(mcpList.stdout).has(HERMES_MCP_NAME);
+        const servers = parseHermesMcpList(mcpList.stdout);
+        if (!servers.has(mcpName) && servers.has(LEGACY_MCP_SERVER_NAME)) mcpName = LEGACY_MCP_SERVER_NAME;
+        mcpConfigured = servers.has(mcpName);
         mcpMessage = mcpConfigured ? "Hermes MCP server is installed" : "Hermes MCP server is missing";
       } catch (error) {
         mcpMessage = asErrorMessage(error);
@@ -789,7 +810,7 @@ export async function runDoctor(options: StatusOptions = {}): Promise<DoctorResu
       mcpConnectionMessage = hermesMessage;
     } else if (mcpConfigured) {
       try {
-        await runHermesCommand(commandRunner, ["mcp", "test", HERMES_MCP_NAME]);
+        await runHermesCommand(commandRunner, ["mcp", "test", mcpName]);
         mcpConnectionOk = true;
         mcpConnectionMessage = "Hermes MCP connection test passed";
       } catch (error) {

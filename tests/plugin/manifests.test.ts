@@ -42,7 +42,7 @@ describe("plugin manifests", () => {
 
   it("declares a valid plugin.json", async () => {
     const plugin = await readJson(".claude-plugin/plugin.json");
-    expect(plugin.name).toBe("project-progress");
+    expect(plugin.name).toBe("breadcrumbs");
     expect(typeof plugin.version).toBe("string");
     expect(plugin.description.length).toBeGreaterThan(20);
   });
@@ -65,7 +65,7 @@ describe("plugin manifests", () => {
   it("exposes the plugin through a self-sourced marketplace", async () => {
     const market = await readJson(".claude-plugin/marketplace.json");
     const plugin = await readJson(".claude-plugin/plugin.json");
-    expect(market.name).toBe("awesome-progress-tracker");
+    expect(market.name).toBe("breadcrumbs");
     expect(Array.isArray(market.plugins)).toBe(true);
     const entry = market.plugins.find((p: any) => p.name === plugin.name);
     expect(entry).toBeDefined();
@@ -74,7 +74,7 @@ describe("plugin manifests", () => {
 
   it("registers the MCP server at a path that exists in dist", async () => {
     const mcp = await readJson(".mcp.json");
-    const server = mcp.mcpServers["project-progress"];
+    const server = mcp.mcpServers["breadcrumbs"];
     expect(server.command).toBe("node");
     const arg = server.args[0];
     expect(arg).toContain("${CLAUDE_PLUGIN_ROOT}");
@@ -106,9 +106,9 @@ describe("plugin manifests", () => {
   });
 
   it("ships the skill and init command the plugin advertises", async () => {
-    expect(await exists("skills/project-progress/SKILL.md")).toBe(true);
-    const skill = await fs.readFile(path.join(root, "skills/project-progress/SKILL.md"), "utf-8");
-    expect(skill).toContain("name: project-progress");
+    expect(await exists("skills/breadcrumbs/SKILL.md")).toBe(true);
+    const skill = await fs.readFile(path.join(root, "skills/breadcrumbs/SKILL.md"), "utf-8");
+    expect(skill).toContain("name: breadcrumbs");
 
     expect(await exists("commands/init.md")).toBe(true);
     const command = await fs.readFile(path.join(root, "commands/init.md"), "utf-8");
@@ -149,7 +149,7 @@ describe("Codex plugin manifests", () => {
 
   it("launches the bundled Codex MCP server from the plugin root", async () => {
     const mcp = await readJson(".mcp.codex.json");
-    const server = mcp.mcpServers["project-progress"];
+    const server = mcp.mcpServers["breadcrumbs"];
 
     expect(server.command).toBe("node");
     expect(server.args).toEqual(["dist/src/mcp/server.js"]);
@@ -161,7 +161,7 @@ describe("Codex plugin manifests", () => {
     const market = await readJson(".agents/plugins/marketplace.json");
     expect(market.interface.displayName).toBe("Breadcrumbs");
     expect(Array.isArray(market.plugins)).toBe(true);
-    const entry = market.plugins.find((p: any) => p.name === "project-progress");
+    const entry = market.plugins.find((p: any) => p.name === "breadcrumbs");
     expect(entry).toBeDefined();
     expect(entry.source).toEqual({ source: "local", path: "." });
   });

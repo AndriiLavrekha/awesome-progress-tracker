@@ -10,7 +10,7 @@ Project-local Markdown that survives context resets — so your agent picks up e
 [![Node](https://img.shields.io/badge/node-%3E%3D18-339933?style=flat-square&logo=node.js&logoColor=white)](#choose-your-path)
 [![TypeScript](https://img.shields.io/badge/-typescript-3178C6?style=flat-square&logo=typescript&logoColor=white)](#mcp-server)
 [![Plugins](https://img.shields.io/badge/plugins-Claude%20Code%20%C2%B7%20Codex-8A2BE2?style=flat-square)](#choose-your-path)
-[![Version](https://img.shields.io/badge/version-0.7.0-informational?style=flat-square)](https://github.com/AndriiLavrekha/breadcrumbs/releases/tag/v0.7.0)
+[![Version](https://img.shields.io/badge/version-0.8.0-informational?style=flat-square)](https://github.com/AndriiLavrekha/breadcrumbs/releases/tag/v0.8.0)
 
 [Why](#why) · [Features](#features) · [Quick Start](#choose-your-path) · [MCP Tools](#mcp-server) · [Troubleshooting](#troubleshooting-codex)
 
@@ -50,7 +50,7 @@ new session ◄── SessionStart hook injects the snapshot, no lookup needed �
 | **Claude Code** | [Claude Code plugin](#install-as-a-claude-code-plugin-recommended) — zero-config, one marketplace add |
 | **Codex** | [Codex plugin](#install-as-a-codex-plugin-recommended) — native plugin flow, no `config.toml` editing |
 | **Hermes Agent** | [Hermes install](#install-for-hermes-agent) — Skill + MCP only; lifecycle hooks are deferred |
-| **Gemini CLI / Copilot / Cursor** | Drop `skills/project-progress/SKILL.md` into `~/.agents/skills` or a repo's `.agents/skills` |
+| **Gemini CLI / Copilot / Cursor** | Drop `skills/breadcrumbs/SKILL.md` into `~/.agents/skills` or a repo's `.agents/skills` |
 | **MCP client or CLI only** | [Manual install](#initialize-a-project) and, if needed, [MCP Server](#mcp-server) |
 
 > Requires Node.js >= 18. Hooks and MCP server run entirely on Node — no Python needed.
@@ -63,22 +63,22 @@ Zero-config: one marketplace add + install wires the skill, MCP server, and life
 
 ```text
 /plugin marketplace add AndriiLavrekha/breadcrumbs
-/plugin install project-progress@awesome-progress-tracker
+/plugin install breadcrumbs@breadcrumbs
 ```
 
 Or from the CLI:
 
 ```bash
 claude plugin marketplace add AndriiLavrekha/breadcrumbs
-claude plugin install project-progress@awesome-progress-tracker
+claude plugin install breadcrumbs@breadcrumbs
 ```
 
 What you get (restart the session to load it):
 
 | Piece | What it does |
 | --- | --- |
-| **Skill** `project-progress` | Guides the agent to maintain `project-progress/` during work |
-| **Command** `/project-progress:init [name]` | Initializes tracking in the current repo |
+| **Skill** `breadcrumbs` | Guides the agent to maintain `project-progress/` during work |
+| **Command** `/breadcrumbs:init [name]` | Initializes tracking in the current repo |
 | **MCP server** `project-progress` | `list/refresh/read/update/mark` tools over a cross-project index |
 | **`SessionStart` hook** | Injects the Resume Snapshot / Next Action as context |
 | **`PreToolUse` hook** | Blocks `git commit` on progress marked `commit_progress: false` or `sensitivity: sensitive` |
@@ -94,7 +94,7 @@ The same repo is also a Codex plugin — installs through the native flow, no ma
 
 ```bash
 codex plugin marketplace add AndriiLavrekha/breadcrumbs
-codex plugin add project-progress@awesome-progress-tracker
+codex plugin add breadcrumbs@breadcrumbs
 ```
 
 This wires the same skill, MCP server, and lifecycle hooks as the Claude Code plugin. Restart Codex after installing or updating so the manifest, MCP server, and hooks reload.
@@ -110,7 +110,7 @@ This wires the same skill, MCP server, and lifecycle hooks as the Claude Code pl
 
 ```bash
 codex plugin marketplace upgrade
-codex plugin add project-progress@awesome-progress-tracker
+codex plugin add breadcrumbs@breadcrumbs
 codex plugin list
 ```
 
@@ -119,7 +119,7 @@ Start a new Codex session afterward. If prompted, review and trust the updated h
 **Claude Code**
 
 ```bash
-claude plugin update project-progress@awesome-progress-tracker
+claude plugin update breadcrumbs@breadcrumbs
 claude plugin list
 ```
 
@@ -162,18 +162,18 @@ npx --package=github:AndriiLavrekha/breadcrumbs breadcrumbs install -g hermes
 
 | Piece | What it does |
 | --- | --- |
-| **Skill** `project-progress` | Installed from the tagged raw GitHub `SKILL.md` |
-| **MCP server** `awesome-progress-tracker` | Added via `hermes mcp add ...` with `PROJECT_PROGRESS_ROOTS` |
-| **Doctor** | Checks Hermes CLI, skill, MCP presence, and `hermes mcp test awesome-progress-tracker` |
+| **Skill** `breadcrumbs` | Installed from the tagged raw GitHub `SKILL.md` |
+| **MCP server** `breadcrumbs` | Added via `hermes mcp add ...` with `PROJECT_PROGRESS_ROOTS` |
+| **Doctor** | Checks Hermes CLI, skill, MCP presence, and `hermes mcp test breadcrumbs` |
 | **Uninstall** | Removes only the managed skill and MCP server |
 
-Named collisions stop the install before any changes are made. If Hermes already has a `project-progress` skill or `awesome-progress-tracker` MCP server, remove or rename the existing entry first and rerun the installer.
+Named collisions stop the install before any changes are made. If Hermes already has a `breadcrumbs` skill or `breadcrumbs` MCP server, remove or rename the existing entry first and rerun the installer.
 
 After install or update, restart Hermes so it reloads the managed skill and MCP registry. Because lifecycle hooks are deferred for Hermes, drive things manually for now:
 
 - initialize with `breadcrumbs init . --project "<name>"` when the user opts in
 - check setup with `breadcrumbs status -g hermes` / `doctor -g hermes`
-- verify directly with `hermes skills list --source hub`, `hermes mcp list`, `hermes mcp test awesome-progress-tracker`
+- verify directly with `hermes skills list --source hub`, `hermes mcp list`, `hermes mcp test breadcrumbs`
 
 ## Initialize A Project
 
@@ -195,7 +195,25 @@ breadcrumbs init /path/to/repo --project "My Project"
 
 Breadcrumbs is the new name for Awesome Progress Tracker. The primary command is `breadcrumbs`; `awesome-progress-tracker` and `project-progress` remain aliases for the same commands and data.
 
-Your `project-progress/` files, `~/.awesome-progress-tracker` state and index, `PROJECT_PROGRESS_ROOTS`, and `AWESOME_PROGRESS_TRACKER_HOME` stay in place. The plugin and skill ID remains `project-progress`, the marketplace ID remains `awesome-progress-tracker`, and existing MCP server keys remain unchanged. This is why plugin commands still use `project-progress@awesome-progress-tracker`. There is no project-data migration.
+Your `project-progress/` files, `~/.awesome-progress-tracker` state and index, `PROJECT_PROGRESS_ROOTS`, and `AWESOME_PROGRESS_TRACKER_HOME` stay in place. Starting in v0.8.0, the plugin, marketplace, skill and MCP identities are `breadcrumbs`. The new plugin selector is **`breadcrumbs@breadcrumbs`**. There is no project-data migration.
+
+Uninstall the old plugin and remove its marketplace before adding the renamed one. Run the commands for your provider only:
+
+```bash
+# Claude Code
+claude plugin uninstall project-progress@awesome-progress-tracker
+claude plugin marketplace remove awesome-progress-tracker
+claude plugin marketplace add AndriiLavrekha/breadcrumbs
+claude plugin install breadcrumbs@breadcrumbs
+
+# Codex
+codex plugin remove project-progress@awesome-progress-tracker
+codex plugin marketplace remove awesome-progress-tracker
+codex plugin marketplace add AndriiLavrekha/breadcrumbs
+codex plugin add breadcrumbs@breadcrumbs
+```
+
+For a CLI-managed Hermes install, run `breadcrumbs uninstall -g hermes` before `breadcrumbs install -g hermes`; the new uninstaller recognizes both old and new managed names. Manual Claude/Codex CLI reinstalls replace old owned configuration blocks and server keys with the new identity. Restart the agent after switching plugins, and avoid enabling both plugin identities at once.
 
 When switching a global install to a new npm package identity, first check which package owns the old commands:
 
@@ -237,7 +255,7 @@ Replace `...` with `npx --package=github:AndriiLavrekha/breadcrumbs breadcrumbs`
 
 Manual instruction files are also available:
 
-- `skills/project-progress/SKILL.md` — install or reference for Codex
+- `skills/breadcrumbs/SKILL.md` — install or reference for Codex
 - `agent-instructions/AGENTS-snippet.md` — paste into a project or global AGENTS.md
 - `agent-instructions/CLAUDE-snippet.md` — paste into Claude Code memory
 - `agent-instructions/HOOKS.md` — lifecycle reminders and validation
@@ -366,7 +384,7 @@ Check in order:
 
 The prompt-time hook covers work submitted after startup — if the project was created mid-session, submit the next prompt after trusting the updated hook.
 
-Hooks are best-effort and never block normal Codex operation. If hooks are disabled or untrusted, the `project-progress` skill and bootstrap instructions still define the workflow.
+Hooks are best-effort and never block normal Codex operation. If hooks are disabled or untrusted, the `breadcrumbs` skill and bootstrap instructions still define the workflow.
 
 </details>
 
@@ -383,7 +401,7 @@ Each project owns its own progress files — global vaults, dashboards, and MCP 
 | Path | What lives there |
 | --- | --- |
 | `templates/project-progress/` | Canonical Markdown templates for new projects |
-| `skills/project-progress/SKILL.md` | Cross-tool skill instructions for maintaining progress |
+| `skills/breadcrumbs/SKILL.md` | Cross-tool skill instructions for maintaining progress |
 | `agent-instructions/` | Reusable AGENTS.md, Claude Code, and hook guidance snippets |
 | `src/hook/` | TypeScript progress validation and lifecycle hook checks (compiled to `dist/`) |
 | `hooks/` | PowerShell and POSIX wrappers that run the compiled hook on Node |

@@ -1,18 +1,18 @@
 {
-  "name": "awesome-progress-tracker",
+  "name": "breadcrumbs",
   "owner": {
     "name": "Andrii Lavrekha",
     "url": "https://github.com/AndriiLavrekha"
   },
   "metadata": {
     "description": "Project-local Markdown progress tracking for Claude Code, Codex, and MCP-compatible agents.",
-    "version": "0.7.0"
+    "version": "0.8.0"
   },
   "plugins": [
     {
-      "name": "project-progress",
+      "name": "breadcrumbs",
       "source": "./",
-      "description": "Resumable, project-local progress tracking: the project-progress skill, an MCP index server, and lifecycle hooks (resume-context injection on start, sensitive-progress commit guard).",
+      "description": "Resumable, project-local progress tracking: the breadcrumbs skill, an MCP index server, and lifecycle hooks (resume-context injection on start, sensitive-progress commit guard).",
       "category": "productivity",
       "tags": [
         "progress",

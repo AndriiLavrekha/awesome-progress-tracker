@@ -1,8 +1,10 @@
 {
   "mcpServers": {
-    "project-progress": {
+    "breadcrumbs": {
       "command": "node",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/dist/src/mcp/server.js"]
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/dist/src/mcp/server.js"
+      ]
     }
   }
 }

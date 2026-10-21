@@ -389,7 +389,7 @@ function textResult(text: string) {
 }
 
 export function createServer(): McpServer {
-  const server = new McpServer({ name: "project-progress", version: PACKAGE_VERSION });
+  const server = new McpServer({ name: "breadcrumbs", version: PACKAGE_VERSION });
 
   server.registerTool(
     "list_projects",

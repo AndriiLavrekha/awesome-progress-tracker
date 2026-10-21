@@ -144,12 +144,12 @@ node dist/src/cli.js init /path/to/some/repo --project "Demo Project"
 **Steps:**
 ```text
 /plugin marketplace add AndriiLavrekha/breadcrumbs
-/plugin install project-progress@awesome-progress-tracker
+/plugin install breadcrumbs@breadcrumbs
 ```
 or from a shell:
 ```bash
 claude plugin marketplace add AndriiLavrekha/breadcrumbs
-claude plugin install project-progress@awesome-progress-tracker
+claude plugin install breadcrumbs@breadcrumbs
 ```
 
 **Record:** the two commands, then restart the session and show the skill, MCP tools, and hooks all present (`claude plugin list`).
@@ -165,7 +165,7 @@ claude plugin install project-progress@awesome-progress-tracker
 **Steps:**
 ```bash
 codex plugin marketplace add AndriiLavrekha/breadcrumbs
-codex plugin add project-progress@awesome-progress-tracker
+codex plugin add breadcrumbs@breadcrumbs
 ```
 
 **Record:** the two commands, then `codex plugin list` confirming it's installed and enabled.

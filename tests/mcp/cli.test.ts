@@ -27,7 +27,7 @@ const expectedSkillUrl =
   `https://raw.githubusercontent.com/AndriiLavrekha/breadcrumbs/v${
     (JSON.parse(readFileSync(path.join(process.cwd(), "package.json"), "utf-8")) as { version: string })
       .version
-  }/skills/project-progress/SKILL.md`;
+  }/skills/breadcrumbs/SKILL.md`;
 
 vi.mock("node:child_process", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:child_process")>();
@@ -51,9 +51,9 @@ function mockHermesLifecycle(options: { installed?: boolean } = {}): void {
     queueMicrotask(() => {
       let stdout = "";
       if (args[0] === "skills" && args[1] === "list") {
-        stdout = options.installed ? "NAME SOURCE\nproject-progress hub\n" : "No skills installed.\n";
+        stdout = options.installed ? "NAME SOURCE\nbreadcrumbs hub\n" : "No skills installed.\n";
       } else if (args[0] === "mcp" && args[1] === "list") {
-        stdout = mcpInstalled ? "NAME STATUS\nawesome-progress-tracker enabled\n" : "No MCP servers configured.\n";
+        stdout = mcpInstalled ? "NAME STATUS\nbreadcrumbs enabled\n" : "No MCP servers configured.\n";
       } else if (args[0] === "mcp" && args[1] === "add") {
         mcpInstalled = true;
       } else if (args[0] === "mcp" && args[1] === "remove") {
@@ -74,6 +74,32 @@ describe("npm CLI", () => {
     expect(helpText()).toContain("breadcrumbs init");
     expect(helpText()).toContain("awesome-progress-tracker");
     expect(helpText()).toContain("project-progress");
+  });
+
+  it("requires explicit Hermes legacy removal and can uninstall the old managed identities", async () => {
+    const calls: string[][] = [];
+    const runner = async (_command: string, args: string[]) => {
+      calls.push(args);
+      if (args[0] === "skills" && args[1] === "list") return { stdout: "NAME SOURCE\nproject-progress hub\n", stderr: "" };
+      if (args[0] === "mcp" && args[1] === "list") return { stdout: "NAME STATUS\nawesome-progress-tracker enabled\n", stderr: "" };
+      if (args[0] === "--version" || args[1] === "test") return { stdout: "ok", stderr: "" };
+      if (args[1] === "remove" || args[1] === "uninstall") return { stdout: "removed", stderr: "" };
+      throw new Error("Unexpected mutation before legacy removal");
+    };
+    await expect(installAgent({ agent: "hermes", commandRunner: runner })).rejects.toThrow("breadcrumbs uninstall -g hermes");
+    expect(calls).toHaveLength(2);
+    expect(await readStatus({ agent: "hermes", commandRunner: runner })).toMatchObject({
+      skillInstalled: true,
+      mcpConfigured: true,
+      files: { skill: "Hermes skill: project-progress", mcpConfig: "Hermes MCP server: awesome-progress-tracker" }
+    });
+    const home = await fs.mkdtemp(path.join(os.tmpdir(), "breadcrumbs-legacy-doctor-"));
+    expect((await runDoctor({ agent: "hermes", homeDir: home, commandRunner: runner })).ok).toBe(true);
+    expect(calls).toContainEqual(["mcp", "test", "awesome-progress-tracker"]);
+    calls.length = 0;
+    const result = await uninstallAgent({ agent: "hermes", commandRunner: runner });
+    expect(result.changedFiles).toEqual(["Hermes MCP server: awesome-progress-tracker", "Hermes skill: project-progress"]);
+    expect(calls.slice(2)).toEqual([["mcp", "remove", "awesome-progress-tracker"], ["skills", "uninstall", "project-progress"]]);
   });
 
   it.each(["claude", "codex"] as const)("updates a legacy %s installation without duplicate configuration or data loss", async (agent) => {
@@ -101,18 +127,26 @@ describe("npm CLI", () => {
       await fs.mkdir(path.dirname(skill), { recursive: true });
       await fs.writeFile(skill, "name: project-progress\nLegacy skill.\n");
     }
+    if (agent === "codex") {
+      expect(await readStatus({ agent, homeDir: home, cwd: project })).toMatchObject({ skillInstalled: true });
+    }
     for (let i = 0; i < 2; i++) await installAgent({ agent, homeDir: home, cwd: project });
     const markdown = await fs.readFile(memory, "utf-8");
-    expect(markdown.split(start)).toHaveLength(2);
+    expect(markdown).not.toContain(start);
+    expect(markdown.split("<!-- breadcrumbs:start -->")).toHaveLength(2);
     expect(markdown).toContain("## Breadcrumbs");
     expect(markdown).not.toContain("Legacy instructions.");
     expect(markdown).toContain(userText);
+    if (agent === "codex") {
+      await expect(fs.stat(path.join(home, ".codex", "skills", "awesome-progress-tracker", "SKILL.md"))).rejects.toMatchObject({ code: "ENOENT" });
+      expect(await fs.readFile(path.join(home, ".codex", "skills", "breadcrumbs", "SKILL.md"), "utf-8")).toContain("name: breadcrumbs");
+    }
     expect(await readStatus({ agent, homeDir: home, cwd: project })).toMatchObject({ bootstrapInstalled: true, mcpConfigured: true, projectInitialized: true });
     const config = await fs.readFile(configPath, "utf-8");
     expect(config).toContain("keep-me");
     expect(config).not.toContain("old-command");
-    if (agent === "codex") expect(config.split("[mcp_servers.awesome-progress-tracker]")).toHaveLength(2);
-    else expect(Object.keys(JSON.parse(config).mcpServers)).toEqual(["unrelated", "awesome-progress-tracker"]);
+    if (agent === "codex") expect(config.split("[mcp_servers.breadcrumbs]")).toHaveLength(2);
+    else expect(Object.keys(JSON.parse(config).mcpServers)).toEqual(["unrelated", "breadcrumbs"]);
     await uninstallAgent({ agent, homeDir: home });
     expect(await fs.readFile(memory, "utf-8")).toBe(`${userText}\n`);
     expect(await fs.readFile(configPath, "utf-8")).toContain("keep-me");
@@ -288,7 +322,7 @@ describe("npm CLI", () => {
     expect(markdown).toContain("This project is not initialized with Breadcrumbs");
     expect(markdown).toContain("Only initialize after the user says yes");
     expect(markdown).toContain("npx --package=github:AndriiLavrekha/breadcrumbs breadcrumbs init");
-    expect(config.mcpServers["awesome-progress-tracker"]).toEqual({
+    expect(config.mcpServers["breadcrumbs"]).toEqual({
       type: "stdio",
       command: "npx",
       args: ["-y", "github:AndriiLavrekha/breadcrumbs", "mcp"],
@@ -303,7 +337,7 @@ describe("npm CLI", () => {
 
     const result = await installAgent({ agent: "codex", homeDir: home, roots: "C:/one;C:/two" });
     const codexAgents = path.join(home, ".codex", "AGENTS.md");
-    const codexSkill = path.join(home, ".codex", "skills", "awesome-progress-tracker", "SKILL.md");
+    const codexSkill = path.join(home, ".codex", "skills", "breadcrumbs", "SKILL.md");
     const codexConfig = path.join(home, ".codex", "config.toml");
     const agentsMarkdown = await fs.readFile(codexAgents, "utf-8");
     const skillMarkdown = await fs.readFile(codexSkill, "utf-8");
@@ -312,8 +346,8 @@ describe("npm CLI", () => {
     expect(result.agent).toBe("codex");
     expect(result.writtenFiles).toEqual([codexAgents, codexSkill, codexConfig]);
     expect(agentsMarkdown).toContain("ask the user before initializing");
-    expect(skillMarkdown).toContain("name: project-progress");
-    expect(configToml).toContain("[mcp_servers.awesome-progress-tracker]");
+    expect(skillMarkdown).toContain("name: breadcrumbs");
+    expect(configToml).toContain("[mcp_servers.breadcrumbs]");
     expect(configToml).toContain('args = ["-y", "github:AndriiLavrekha/breadcrumbs", "mcp"]');
     expect(configToml).toContain('PROJECT_PROGRESS_ROOTS = "C:/one;C:/two"');
   });
@@ -333,7 +367,7 @@ describe("npm CLI", () => {
           stdout:
             mcpListCount === 1
               ? "NAME STATUS\nother enabled\n"
-              : "NAME STATUS\nawesome-progress-tracker enabled\n",
+              : "NAME STATUS\nbreadcrumbs enabled\n",
           stderr: ""
         };
       }
@@ -348,14 +382,14 @@ describe("npm CLI", () => {
 
     expect(result).toEqual({
       agent: "hermes",
-      writtenFiles: ["Hermes skill: project-progress", "Hermes MCP server: awesome-progress-tracker"]
+      writtenFiles: ["Hermes skill: breadcrumbs", "Hermes MCP server: breadcrumbs"]
     });
     expect(calls).toEqual([
       { command: "hermes", args: ["skills", "list", "--source", "hub"], stdin: undefined },
       { command: "hermes", args: ["mcp", "list"], stdin: undefined },
       {
         command: "hermes",
-        args: ["skills", "install", skillUrl, "--name", "project-progress", "--yes"],
+        args: ["skills", "install", skillUrl, "--name", "breadcrumbs", "--yes"],
         stdin: undefined
       },
       {
@@ -363,7 +397,7 @@ describe("npm CLI", () => {
         args: [
           "mcp",
           "add",
-          "awesome-progress-tracker",
+          "breadcrumbs",
           "--command",
           "npx",
           "--env",
@@ -390,7 +424,7 @@ describe("npm CLI", () => {
           stdout:
             mcpListCount === 1
               ? "NAME STATUS\nother enabled\n"
-              : "NAME STATUS\nawesome-progress-tracker enabled\n",
+              : "NAME STATUS\nbreadcrumbs enabled\n",
           stderr: ""
         };
       }
@@ -409,7 +443,7 @@ describe("npm CLI", () => {
 
     expect(result).toEqual({
       agent: "hermes",
-      writtenFiles: ["Hermes MCP server: awesome-progress-tracker"]
+      writtenFiles: ["Hermes MCP server: breadcrumbs"]
     });
     expect(calls).toEqual([
       { command: "hermes", args: ["mcp", "list"], stdin: undefined },
@@ -418,7 +452,7 @@ describe("npm CLI", () => {
         args: [
           "mcp",
           "add",
-          "awesome-progress-tracker",
+          "breadcrumbs",
           "--command",
           "npx",
           "--env",
@@ -439,10 +473,10 @@ describe("npm CLI", () => {
     const runner = async (command: string, args: string[], options?: { stdin?: string }) => {
       calls.push({ command, args, stdin: options?.stdin });
       if (args[0] === "skills" && args[1] === "list") {
-        return { stdout: "\u001b[32mproject-progress\u001b[0m hub\n", stderr: "" };
+        return { stdout: "\u001b[32mbreadcrumbs\u001b[0m hub\n", stderr: "" };
       }
       if (args[0] === "mcp" && args[1] === "list") {
-        return { stdout: "NAME STATUS\nawesome-progress-tracker enabled\n", stderr: "" };
+        return { stdout: "NAME STATUS\nbreadcrumbs enabled\n", stderr: "" };
       }
       throw new Error(`unexpected command: ${command} ${args.join(" ")}`);
     };
@@ -453,7 +487,7 @@ describe("npm CLI", () => {
         roots: "C:/one;C:/two",
         commandRunner: runner
       })
-    ).rejects.toThrow(/project-progress|awesome-progress-tracker/);
+    ).rejects.toThrow(/breadcrumbs/);
 
     expect(calls).toEqual([
       { command: "hermes", args: ["skills", "list", "--source", "hub"], stdin: undefined },
@@ -469,14 +503,14 @@ describe("npm CLI", () => {
       "┌──────────────────┬────────┐",
       "│ Name             │ Source │",
       "├──────────────────┼────────┤",
-      "│ project-progress │ hub    │",
+      "│ breadcrumbs │ hub    │",
       "└──────────────────┴────────┘"
     ].join("\n");
     const tableMcpList = [
       "┌──────────────────────────┬─────────┐",
       "│ Name                     │ Status  │",
       "├──────────────────────────┼─────────┤",
-      "│ awesome-progress-tracker │ enabled │",
+      "│ breadcrumbs │ enabled │",
       "└──────────────────────────┴─────────┘"
     ].join("\n");
     const statusRunner = async (command: string, args: string[], options?: { stdin?: string }) => {
@@ -515,16 +549,16 @@ describe("npm CLI", () => {
 
     await expect(uninstallAgent({ agent: "hermes", commandRunner: uninstallRunner })).resolves.toEqual({
       agent: "hermes",
-      changedFiles: ["Hermes MCP server: awesome-progress-tracker", "Hermes skill: project-progress"]
+      changedFiles: ["Hermes MCP server: breadcrumbs", "Hermes skill: breadcrumbs"]
     });
     expect(uninstallCalls).toContainEqual({
       command: "hermes",
-      args: ["mcp", "remove", "awesome-progress-tracker"],
+      args: ["mcp", "remove", "breadcrumbs"],
       stdin: "y\n"
     });
     expect(uninstallCalls).toContainEqual({
       command: "hermes",
-      args: ["skills", "uninstall", "project-progress"],
+      args: ["skills", "uninstall", "breadcrumbs"],
       stdin: "y\n"
     });
   });
@@ -566,7 +600,7 @@ describe("npm CLI", () => {
           "install",
           expectedSkillUrl,
           "--name",
-          "project-progress",
+          "breadcrumbs",
           "--yes"
         ],
         stdin: undefined
@@ -576,7 +610,7 @@ describe("npm CLI", () => {
         args: [
           "mcp",
           "add",
-          "awesome-progress-tracker",
+          "breadcrumbs",
           "--command",
           "npx",
           "--env",
@@ -590,7 +624,7 @@ describe("npm CLI", () => {
       },
       {
         command: "hermes",
-        args: ["skills", "uninstall", "project-progress"],
+        args: ["skills", "uninstall", "breadcrumbs"],
         stdin: "y\n"
       }
     ]);
@@ -636,7 +670,7 @@ describe("npm CLI", () => {
           "install",
           expectedSkillUrl,
           "--name",
-          "project-progress",
+          "breadcrumbs",
           "--yes"
         ],
         stdin: undefined
@@ -646,7 +680,7 @@ describe("npm CLI", () => {
         args: [
           "mcp",
           "add",
-          "awesome-progress-tracker",
+          "breadcrumbs",
           "--command",
           "npx",
           "--env",
@@ -661,7 +695,7 @@ describe("npm CLI", () => {
       { command: "hermes", args: ["mcp", "list"], stdin: undefined },
       {
         command: "hermes",
-        args: ["skills", "uninstall", "project-progress"],
+        args: ["skills", "uninstall", "breadcrumbs"],
         stdin: "y\n"
       }
     ]);
@@ -674,10 +708,10 @@ describe("npm CLI", () => {
     const runner = async (command: string, args: string[], options?: { stdin?: string }) => {
       calls.push({ command, args, stdin: options?.stdin });
       if (args[0] === "skills" && args[1] === "list") {
-        return { stdout: "NAME SOURCE\nproject-progress hub\n", stderr: "" };
+        return { stdout: "NAME SOURCE\nbreadcrumbs hub\n", stderr: "" };
       }
       if (args[0] === "mcp" && args[1] === "list") {
-        return { stdout: "NAME STATUS\nawesome-progress-tracker enabled\n", stderr: "" };
+        return { stdout: "NAME STATUS\nbreadcrumbs enabled\n", stderr: "" };
       }
       throw new Error(`unexpected command: ${command} ${args.join(" ")}`);
     };
@@ -689,8 +723,8 @@ describe("npm CLI", () => {
       skillInstalled: true,
       mcpConfigured: true,
       files: {
-        skill: "Hermes skill: project-progress",
-        mcpConfig: "Hermes MCP server: awesome-progress-tracker"
+        skill: "Hermes skill: breadcrumbs",
+        mcpConfig: "Hermes MCP server: breadcrumbs"
       }
     });
     expect(calls).toEqual([
@@ -704,10 +738,10 @@ describe("npm CLI", () => {
     const runner = async (command: string, args: string[], options?: { stdin?: string }) => {
       calls.push({ command, args, stdin: options?.stdin });
       if (args[0] === "skills" && args[1] === "list") {
-        return { stdout: "NAME SOURCE\nproject-progress hub\n", stderr: "" };
+        return { stdout: "NAME SOURCE\nbreadcrumbs hub\n", stderr: "" };
       }
       if (args[0] === "mcp" && args[1] === "list") {
-        return { stdout: "NAME STATUS\nawesome-progress-tracker enabled\n", stderr: "" };
+        return { stdout: "NAME STATUS\nbreadcrumbs enabled\n", stderr: "" };
       }
       if (args[0] === "mcp" && args[1] === "remove") {
         return { stdout: "", stderr: "" };
@@ -720,14 +754,14 @@ describe("npm CLI", () => {
 
     await expect(uninstallAgent({ agent: "hermes", commandRunner: runner })).resolves.toEqual({
       agent: "hermes",
-      changedFiles: ["Hermes MCP server: awesome-progress-tracker", "Hermes skill: project-progress"]
+      changedFiles: ["Hermes MCP server: breadcrumbs", "Hermes skill: breadcrumbs"]
     });
 
     expect(calls).toEqual([
       { command: "hermes", args: ["skills", "list", "--source", "hub"], stdin: undefined },
       { command: "hermes", args: ["mcp", "list"], stdin: undefined },
-      { command: "hermes", args: ["mcp", "remove", "awesome-progress-tracker"], stdin: "y\n" },
-      { command: "hermes", args: ["skills", "uninstall", "project-progress"], stdin: "y\n" }
+      { command: "hermes", args: ["mcp", "remove", "breadcrumbs"], stdin: "y\n" },
+      { command: "hermes", args: ["skills", "uninstall", "breadcrumbs"], stdin: "y\n" }
     ]);
 
     const idempotentCalls: Array<{ command: string; args: string[]; stdin?: string }> = [];
@@ -763,10 +797,10 @@ describe("npm CLI", () => {
         return { stdout: "Hermes 1.2.3\n", stderr: "" };
       }
       if (args[0] === "skills" && args[1] === "list") {
-        return { stdout: "NAME SOURCE\nproject-progress hub\n", stderr: "" };
+        return { stdout: "NAME SOURCE\nbreadcrumbs hub\n", stderr: "" };
       }
       if (args[0] === "mcp" && args[1] === "list") {
-        return { stdout: "NAME STATUS\nawesome-progress-tracker enabled\n", stderr: "" };
+        return { stdout: "NAME STATUS\nbreadcrumbs enabled\n", stderr: "" };
       }
       if (args[0] === "mcp" && args[1] === "test") {
         return { stdout: "connected\n", stderr: "" };
@@ -791,7 +825,7 @@ describe("npm CLI", () => {
       { command: "hermes", args: ["--version"], stdin: undefined },
       { command: "hermes", args: ["skills", "list", "--source", "hub"], stdin: undefined },
       { command: "hermes", args: ["mcp", "list"], stdin: undefined },
-      { command: "hermes", args: ["mcp", "test", "awesome-progress-tracker"], stdin: undefined }
+      { command: "hermes", args: ["mcp", "test", "breadcrumbs"], stdin: undefined }
     ]);
   });
 
@@ -819,10 +853,10 @@ describe("npm CLI", () => {
         return { stdout: "Hermes 1.2.3\n", stderr: "" };
       }
       if (args[0] === "skills" && args[1] === "list") {
-        return { stdout: "NAME SOURCE\nproject-progress hub\n", stderr: "" };
+        return { stdout: "NAME SOURCE\nbreadcrumbs hub\n", stderr: "" };
       }
       if (args[0] === "mcp" && args[1] === "list") {
-        return { stdout: "NAME STATUS\nawesome-progress-tracker enabled\n", stderr: "" };
+        return { stdout: "NAME STATUS\nbreadcrumbs enabled\n", stderr: "" };
       }
       if (args[0] === "mcp" && args[1] === "test") {
         throw new Error("connection refused");
@@ -844,7 +878,7 @@ describe("npm CLI", () => {
     });
     expect(failingCalls).toContainEqual({
       command: "hermes",
-      args: ["mcp", "test", "awesome-progress-tracker"],
+      args: ["mcp", "test", "breadcrumbs"],
       stdin: undefined
     });
   });
@@ -862,10 +896,10 @@ describe("npm CLI", () => {
 
     const uninstallRunner = async (_command: string, args: string[]) => {
       if (args[0] === "skills" && args[1] === "list") {
-        return { stdout: "NAME SOURCE\nproject-progress hub\n", stderr: "" };
+        return { stdout: "NAME SOURCE\nbreadcrumbs hub\n", stderr: "" };
       }
       if (args[0] === "mcp" && args[1] === "list") {
-        return { stdout: "NAME STATUS\nawesome-progress-tracker enabled\n", stderr: "" };
+        return { stdout: "NAME STATUS\nbreadcrumbs enabled\n", stderr: "" };
       }
       if (args[0] === "mcp" && args[1] === "remove") {
         throw new Error("remove failed");
@@ -873,7 +907,7 @@ describe("npm CLI", () => {
       return { stdout: "", stderr: "" };
     };
     await expect(uninstallAgent({ agent: "hermes", commandRunner: uninstallRunner })).rejects.toThrow(
-      /hermes mcp remove awesome-progress-tracker[\s\S]*remove failed/
+      /hermes mcp remove breadcrumbs[\s\S]*remove failed/
     );
   });
 
@@ -891,7 +925,7 @@ describe("npm CLI", () => {
     const config = JSON.parse(await fs.readFile(projectConfig, "utf-8"));
 
     expect(result.writtenFiles).toEqual([projectConfig]);
-    expect(config.mcpServers["awesome-progress-tracker"]).toEqual({
+    expect(config.mcpServers["breadcrumbs"]).toEqual({
       type: "stdio",
       command: "npx",
       args: ["-y", "github:AndriiLavrekha/breadcrumbs", "mcp"],

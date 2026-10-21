@@ -1,11 +1,11 @@
 {
-  "name": "awesome-progress-tracker",
+  "name": "breadcrumbs",
   "interface": {
     "displayName": "Breadcrumbs"
   },
   "plugins": [
     {
-      "name": "project-progress",
+      "name": "breadcrumbs",
       "source": {
         "source": "local",
         "path": "."

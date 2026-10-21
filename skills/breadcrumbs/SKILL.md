@@ -1,5 +1,5 @@
 ---
-name: project-progress
+name: breadcrumbs
 description: Maintain project-local Markdown progress state in project-progress/ for multi-step work, resumability, lifecycle checkpoints, and token-conscious agent handoff.
 ---
 

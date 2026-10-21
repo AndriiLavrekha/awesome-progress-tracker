@@ -69,7 +69,7 @@ async function withIndex(
 }
 
 describe("MCP server tools", () => {
-  it("advertises the package version while preserving the protocol identity", async () => {
+  it("advertises the package version under the Breadcrumbs protocol identity", async () => {
     const pkg = JSON.parse(await fs.readFile("package.json", "utf-8"));
     const server = createServer();
     const client = new Client({ name: "rename-test", version: "1.0.0" });
@@ -77,7 +77,7 @@ describe("MCP server tools", () => {
     try {
       await server.connect(serverTransport);
       await client.connect(clientTransport);
-      expect(client.getServerVersion()).toEqual({ name: "project-progress", version: pkg.version });
+      expect(client.getServerVersion()).toEqual({ name: "breadcrumbs", version: pkg.version });
     } finally {
       await client.close();
       await server.close();

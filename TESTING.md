@@ -146,7 +146,7 @@ npx --yes --package="$PACKAGE_TGZ" breadcrumbs install -g hermes --roots "C:/pat
 
 hermes skills list --source hub
 hermes mcp list
-hermes mcp test awesome-progress-tracker
+hermes mcp test breadcrumbs
 npx --yes --package="$PACKAGE_TGZ" breadcrumbs doctor -g hermes
 
 # Start Hermes against a temp initialized project and smoke the agent-facing tool flow:
@@ -156,7 +156,7 @@ npx --yes --package="$PACKAGE_TGZ" breadcrumbs state set /path/to/repo --state o
 npx --yes --package="$PACKAGE_TGZ" breadcrumbs uninstall -g hermes
 ```
 
-**Expected:** the temp `HERMES_HOME` holds all managed state, real profile untouched. `hermes skills list --source hub` shows `project-progress`; `hermes mcp list` shows `awesome-progress-tracker`; `hermes mcp test awesome-progress-tracker` passes. The Hermes agent can list/read/update projects through the MCP tools. Opt-out suppresses future prompts for that repo. `uninstall -g hermes` cleanly removes the managed skill and MCP server.
+**Expected:** the temp `HERMES_HOME` holds all managed state, real profile untouched. `hermes skills list --source hub` shows `breadcrumbs`; `hermes mcp list` shows `breadcrumbs`; `hermes mcp test breadcrumbs` passes. The Hermes agent can list/read/update projects through the MCP tools. Opt-out suppresses future prompts for that repo. `uninstall -g hermes` cleanly removes the managed skill and MCP server.
 
 ### PowerShell
 
@@ -171,7 +171,7 @@ $env:HERMES_HOME = $hermesHome
 npx --yes --package="$packageTgz" breadcrumbs install -g hermes --roots "C:/path/to/projects"
 hermes skills list --source hub
 hermes mcp list
-hermes mcp test awesome-progress-tracker
+hermes mcp test breadcrumbs
 npx --yes --package="$packageTgz" breadcrumbs doctor -g hermes
 
 # Run the initialized-project agent smoke and disposable-repo opt-out checks described above.
